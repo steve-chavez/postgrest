@@ -83,6 +83,8 @@ data ApiRequest = ApiRequest {
   , iPreferCount :: Bool
   -- | Filters on the result ("id", "eq.10")
   , iFilters :: [(Text, Text)]
+  -- | &where parameter used for more complex filters including "or" and compound "not"
+  , iWhere :: Maybe ByteString
   -- | &select parameter used to shape the response
   , iSelect :: Text
   -- | &order parameters for each level
@@ -99,6 +101,7 @@ userApiRequest schema req reqBody
   | isTargetingProc && method /= "POST" = Left ActionInappropriate
   | topLevelRange == emptyRange = Left InvalidRange
   | shouldParsePayload && isLeft payload = either (Left . InvalidBody . toS) undefined payload
+  | isJust iwhere && not (null ifilters) = Left WhereParamConflict
   | otherwise = Right ApiRequest {
       iAction = action
       , iTarget = target
@@ -109,7 +112,8 @@ userApiRequest schema req reqBody
       , iPreferRepresentation = representation
       , iPreferSingleObjectParameter = singleObject
       , iPreferCount = hasPrefer "count=exact"
-      , iFilters = [ (toS k, toS $ fromJust v) | (k,v) <- qParams, isJust v, k /= "select", not (endingIn ["order", "limit", "offset"] k) ]
+      , iFilters = ifilters
+      , iWhere = iwhere
       , iSelect = toS $ fromMaybe "*" $ fromMaybe (Just "*") $ lookup "select" qParams
       , iOrder = [(toS k, toS $ fromJust v) | (k,v) <- qParams, isJust v, endingIn ["order"] k ]
       , iCanonicalQS = toS $ urlEncodeVars
@@ -197,6 +201,8 @@ userApiRequest schema req reqBody
           l = fromMaybe 0 $ rangeLimit rl
           o = rangeOffset ro
   ranges = M.insert "limit" (rangeIntersection headerRange (fromMaybe allRange (M.lookup "limit" urlRange))) urlRange
+  ifilters = [ (toS k, toS $ fromJust v) | (k,v) <- qParams, isJust v, k /= "select", not (endingIn ["order", "limit", "offset", "where"] k) ]
+  iwhere = join $ lookup "where" qParams 
 
 {-|
   Find the best match from a list of content types accepted by the

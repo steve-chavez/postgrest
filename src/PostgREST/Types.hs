@@ -21,6 +21,7 @@ data ApiRequestError = ActionInappropriate
                      | UnknownRelation
                      | NoRelationBetween Text Text
                      | UnsupportedVerb
+                     | WhereParamConflict
                      deriving (Show, Eq)
 
 data DbStructure = DbStructure {

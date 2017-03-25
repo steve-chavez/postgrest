@@ -687,3 +687,7 @@ spec = do
         { matchStatus = 200
         , matchHeaders = ["Content-Type" <:> "application/octet-stream; charset=utf-8"]
         }
+
+  describe "where param" $ do
+    it "cannot process request if filters are also present" $
+      get "/items?id=eq.1&where=or{id=lt.2,id=gt.4}" `shouldRespondWith` 400

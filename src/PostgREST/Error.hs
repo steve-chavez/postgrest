@@ -33,6 +33,7 @@ apiRequestError err = errorResponse status err
         NoRelationBetween _ _ -> HT.status400
         InvalidRange -> HT.status416
         UnknownRelation -> HT.status404
+        WhereParamConflict -> HT.status400
 
 simpleError :: HT.Status -> Text -> Response
 simpleError status message =
@@ -91,6 +92,8 @@ instance JSON.ToJSON ApiRequestError where
     "message" .= ("Could not find foreign keys between these entities, No relation found between " <> parent <> " and " <> child :: Text)]
   toJSON UnsupportedVerb = JSON.object [
     "message" .= ("Unsupported HTTP verb" :: Text)]
+  toJSON WhereParamConflict = JSON.object [
+    "message" .= ("The where param(&where=..) cannot be used combined with filters(&id=eq..)" :: Text)]
 
 instance JSON.ToJSON P.UsageError where
   toJSON (P.ConnectionError e) = JSON.object [
