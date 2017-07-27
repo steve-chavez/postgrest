@@ -5,6 +5,7 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 
 ## Unreleased
 
+
 ### Added
 
 - #889, Allow more than two conditions in a single and/or - @steve-chavez
