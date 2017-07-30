@@ -5,6 +5,11 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 
 ## Unreleased
 
+### Added
+
+### Fixed
+
+## [0.4.3.0] - 2017-07-30
 
 ### Added
 
