@@ -1,0 +1,21 @@
+image: Visual Studio 2015
+
+branches:
+  only:
+    - master
+
+build: off
+
+before_build:
+- curl -sS -ostack.zip -L --insecure http://www.stackage.org/stack/windows-x86_64
+- 7z x stack.zip stack.exe
+
+build_script:
+- stack setup --no-terminal > nul
+- stack build --only-snapshot --no-terminal
+- stack --local-bin-path . install postgrest
+
+test: off
+
+artifacts:
+- path: postgrest.exe
