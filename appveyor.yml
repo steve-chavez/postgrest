@@ -4,7 +4,7 @@ cache:
 - "c:\\sr"
 
 environment:
-  PATH_TO_PG_CONFIG: "C:\\Program Files (x86)\\PostgreSQL\\9.5\\bin"
+  PATH_TO_PG_CONFIG: "C:\\Program Files (x86)\\PostgreSQL\\9.6\\bin"
   global:
     STACK_ROOT: "c:\\sr"
 
