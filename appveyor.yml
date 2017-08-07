@@ -4,9 +4,9 @@ cache:
 - "c:\\sr"
 
 environment:
+  PATH_TO_PG_CONFIG: "C:\\Program Files (x86)\\PostgreSQL\\9.5\\bin"
   global:
     STACK_ROOT: "c:\\sr"
-    PATH_TO_PG_CONFIG: "C:\\Program Files (x86)\\PostgreSQL\\9.6\\bin"
 
 build: off
 test: off
@@ -15,10 +15,21 @@ branches:
   only:
     - windows-auto-release
 
+install:
+  - "SET PATH=%PATH_TO_PG_CONFIG%;%PATH%"
+
+  - ECHO "Current PATH:"
+  - cmd: ECHO %PATH%
+
+  - ECHO "Debug: Do we have files in Postgres bin?"
+  - ps: "ls $env:PATH_TO_PG_CONFIG"
+  
+  - ECHO "Debug: Running pg_config.exe"
+  - cmd: pg_config
+
 before_build:
 - curl -sS -ostack.zip -L --insecure http://www.stackage.org/stack/windows-x86_64
 - 7z x stack.zip stack.exe
-- "SET PATH=%PATH_TO_PG_CONFIG%;%PATH%"
 
 build_script:
 - stack setup --no-terminal > nul
