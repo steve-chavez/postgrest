@@ -24,9 +24,6 @@ install:
   - ECHO "Current PATH:"
   - cmd: ECHO %PATH%
 
-  - ECHO "Debug: Do we have files in Postgres bin?"
-  - ps: "ls $env:PATH_TO_PG_CONFIG"
-  
   - ECHO "Debug: Running pg_config.exe"
   - cmd: pg_config
 
