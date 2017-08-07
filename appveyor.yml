@@ -8,8 +8,6 @@ environment:
     STACK_ROOT: "c:\\sr"
     PATH_TO_PG_CONFIG: "C:\\Program Files (x86)\\PostgreSQL\\9.5\\bin"
 
-matrix:
-
 build: off
 test: off
 
