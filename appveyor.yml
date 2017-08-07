@@ -25,7 +25,7 @@ install:
   - cmd: ECHO %PATH%
 
   - ECHO "Debug: Running pg_config.exe"
-  - cmd: pg_config
+  - cmd: PATH=C:\Program Files\PostgreSQL\9.6\bin\;%PATH% pg_config
 
 before_build:
 - curl -sS -ostack.zip -L --insecure http://www.stackage.org/stack/windows-x86_64
