@@ -1,12 +1,15 @@
 image: Visual Studio 2015
 
+services:
+  - postgresql
+
 cache:
 - "c:\\sr"
 
 environment:
   global:
     STACK_ROOT: "c:\\sr"
-    PATH_TO_PG_CONFIG: "C:\\Program Files (x86)\\PostgreSQL\\9.5\\bin"
+    PATH_TO_PG_CONFIG: "C:\\Program Files (x86)\\PostgreSQL\\9.6\\bin"
 
 build: off
 test: off
