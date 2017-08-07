@@ -1,10 +1,18 @@
 image: Visual Studio 2015
 
-branches:
-  only:
-    - master
+cache:
+- "c:\\sr"
+
+environment:
+  global:
+    STACK_ROOT: "c:\\sr"
 
 build: off
+test: off
+
+branches:
+  only:
+    - windows-auto-release
 
 before_build:
 - curl -sS -ostack.zip -L --insecure http://www.stackage.org/stack/windows-x86_64
@@ -14,8 +22,6 @@ build_script:
 - stack setup --no-terminal > nul
 - stack build --only-snapshot --no-terminal
 - stack --local-bin-path . install postgrest
-
-test: off
 
 artifacts:
 - path: postgrest.exe
