@@ -1,3 +1,5 @@
+platform: x64
+
 cache:
 - "c:\\sr"
 
@@ -15,13 +17,19 @@ branches:
 before_build:
 - curl -sS -ostack.zip -L --insecure http://www.stackage.org/stack/windows-x86_64
 - 7z x stack.zip stack.exe
-- PATH=C:\Program Files\PostgreSQL\9.6\bin\;%PATH%
-- pg_config
+- set PATH=C:\Program Files\PostgreSQL\9.6\bin\;%PATH%
 
 build_script:
-- stack setup --no-terminal > nul
-- stack build --only-snapshot --no-terminal
-- stack --local-bin-path . install postgrest
+- stack build --install-ghc --copy-bins --local-bin-path .
+- 7z a -tzip postgrest-0.4.3.0-windows-x64.zip postgrest.exe
 
 artifacts:
-- path: postgrest.exe
+- path: postgrest-0.4.3.0-windows-x64.zip
+
+deploy:
+  - provider: Environment
+    on:
+      branch: master
+
+after_deploy:
+- dir
