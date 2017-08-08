@@ -6,19 +6,20 @@ environment:
   global:
     STACK_ROOT: "c:\\sr"
 
-build: off
 test: off
 
 skip_non_tags: true
 
 branches:
   only:
-    - windows-auto-release
+    - master
 
 install:
 - set PATH=C:\Program Files\PostgreSQL\9.6\bin\;%PATH%
 - curl -sS -ostack.zip -L --insecure http://www.stackage.org/stack/windows-x86_64
 - 7z x stack.zip stack.exe
+- set PATH=c:\gopath\bin;c:\go\bin;%PATH%
+- go get -u github.com/tcnksm/ghr
 
 build_script:
 - stack build --install-ghc --copy-bins --local-bin-path .
@@ -26,15 +27,6 @@ build_script:
 artifacts:
 - path: postgrest.exe
 
-before_deploy:
-- 7z a -tzip postgrest-v0.4.3.0-windows-x64.zip postgrest.exe
-
-deploy:
-  provider: GitHub
-  tag: v0.4.4.0
-  description: ''
-  auth_token:
-    secure: $(GITHUB_TOKEN)
-  artifact: postgrest-v0.4.3.0-windows-x64.zip
-  on:
-    branch: windows-auto-release
+deploy_script:
+- 7z a -tzip postgrest-$(APPVEYOR_REPO_TAG_NAME)-windows-x64.zip postgrest.exe
+- ghr -t $(GITHUB_TOKEN) -u $(APPVEYOR_ACCOUNT_NAME) -r $(APPVEYOR_PROJECT_NAME) --replace $(APPVEYOR_REPO_TAG_NAME) postgrest-$(APPVEYOR_REPO_TAG_NAME)-windows-x64.zip
