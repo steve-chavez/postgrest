@@ -29,7 +29,7 @@ artifacts:
 deploy:
   - provider: Environment
     on:
-      branch: master
+      branch: windows-auto-release
 
 after_deploy:
 - dir
