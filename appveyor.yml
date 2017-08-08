@@ -1,5 +1,6 @@
 cache:
 - "c:\\sr"
+- .stack-work
 
 environment:
   global:
@@ -7,6 +8,8 @@ environment:
 
 build: off
 test: off
+
+skip_non_tags: true
 
 branches:
   only:
@@ -28,7 +31,7 @@ before_deploy:
 
 deploy:
   provider: GitHub
-  tag: v0.4.3.0
+  tag: v0.4.4.0
   description: ''
   auth_token:
     secure: $(GITHUB_TOKEN)
