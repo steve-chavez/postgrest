@@ -48,7 +48,7 @@ test:
 deployment:
   release:
     tag: /v[0-9]+(\.[0-9]+)*/
-    owner: begriffs
+    owner: steve-chavez
     commands:
       - mkdir -p /tmp/bin/{centos6,centos7,ubuntu,ubuntui386}
       - ./docker/distro_release/build-on-container.sh centos6
