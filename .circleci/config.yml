@@ -3,7 +3,6 @@ jobs:
   build-test:
     machine: true
     steps:
-      - run: pg_isready -h localhost -p 5433 -U ubuntu
       - run: pg_isready -h localhost -p 5432 -U ubuntu
       - checkout
       - restore_cache:
