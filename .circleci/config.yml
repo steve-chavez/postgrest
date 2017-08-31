@@ -54,12 +54,12 @@ jobs:
       - run:
           name: build binary
           command: |
-            mkdir -p /tmp/bin/centos6
-            echo "postgrest binary" > /tmp/bin/centos6/postgrest
+            mkdir -p /tmp/bin/
+            echo "postgrest binary" > /tmp/bin/postgrest-centos6
       - persist_to_workspace:
-          root: /tmp/bin/centos6
+          root: /tmp/bin/
           paths:
-            - postgrest
+            - postgrest-centos6
 
   build-centos7-bin:
     docker:
@@ -68,12 +68,12 @@ jobs:
       - run:
           name: build binary
           command: |
-            mkdir -p /tmp/bin/centos7
-            echo "postgrest binary" > /tmp/bin/centos7/postgrest
+            mkdir -p /tmp/bin/
+            echo "postgrest binary" > /tmp/bin/postgrest-centos7
       - persist_to_workspace:
-          root: /tmp/bin/centos7
+          root: /tmp/bin/
           paths:
-            - postgrest
+            - postgrest-centos7
 
   release:
     docker:
@@ -81,7 +81,10 @@ jobs:
     steps:
       - attach_workspace:
           at: /tmp/bin
-      - run: tree /tmp/bin
+      - run: |
+          ls /tmp/bin
+          cat /tmp/bin/postgrest-centos6
+          cat /tmp/bin/postgrest-centos7
 
 workflows:
   version: 2
