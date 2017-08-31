@@ -12,7 +12,7 @@ jobs:
           sudo apt-get update; sudo apt-get install --only-upgrade binutils
       - checkout
       - restore_cache:
-          keys:
+        keys:
           - v1-stack-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
       - run:
         name: setup stack
@@ -43,10 +43,10 @@ jobs:
           stack haddock --no-haddock-deps
           stack sdist
       - save_cache:
-          paths:
-            - "~/.stack"
-            - ".stack-work"
-          key: v1-stack-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
+        paths:
+          - "~/.stack"
+          - ".stack-work"
+        key: v1-stack-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
 
 workflows:
   version: 2
