@@ -54,11 +54,10 @@ jobs:
       - run:
           name: build binary
           command: |
-            mkdir -p /tmp/bin/
-            echo "postgrest binary" > /tmp/bin/postgrest
-            tar cjf postgrest-centos6.tar.xz -C /tmp/bin postgrest
+            echo "postgrest binary" > /tmp/postgrest
+            cd /tmp && tar cjf postgrest-centos6.tar.xz postgrest
       - persist_to_workspace:
-          root: /tmp/bin/
+          root: /tmp
           paths:
             - postgrest-centos6.tar.xz
 
@@ -69,11 +68,10 @@ jobs:
       - run:
           name: build binary
           command: |
-            mkdir -p /tmp/bin/
-            echo "postgrest binary" > /tmp/bin/postgrest
-            tar cjf postgrest-centos7.tar.xz -C /tmp/bin postgrest
+            echo "postgrest binary" > /tmp/postgrest
+            cd /tmp && tar cjf postgrest-centos7.tar.xz postgrest
       - persist_to_workspace:
-          root: /tmp/bin/
+          root: /tmp
           paths:
             - postgrest-centos7.tar.xz
 
@@ -82,11 +80,12 @@ jobs:
       - image: circleci/golang:1.8
     steps:
       - attach_workspace:
-          at: /tmp/bin
-      - run: go get -u github.com/tcnksm/ghr
-      - run: |
-          ls /tmp/bin
-          ghr -t $GITHUB_TOKEN -u $CIRCLE_PROJECT_USERNAME -r $CIRCLE_PROJECT_REPONAME --replace v0.4.3.0 /tmp/bin/
+          at: /tmp
+      - run:
+          name: upload bins to github release
+          command: |
+            go get -u github.com/tcnksm/ghr
+            ghr -t $GITHUB_TOKEN -u $CIRCLE_PROJECT_USERNAME -r $CIRCLE_PROJECT_REPONAME --replace v0.4.3.0 /tmp
 
 workflows:
   version: 2
