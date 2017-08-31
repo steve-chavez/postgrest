@@ -47,9 +47,48 @@ jobs:
             - ".stack-work"
           key: v1-stack-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
 
+  build-centos6-bin:
+    steps:
+      - run:
+          name: build binary
+          command: |
+            mkdir -p /tmp/bin/centos6
+            echo "postgrest binary" > /tmp/bin/centos6/postgrest
+      - persist_to_workspace:
+          root: /tmp/bin/centos6
+          paths:
+            - postgrest
+
+  build-centos7-bin:
+    steps:
+      - run:
+          name: build binary
+          command: |
+            mkdir -p /tmp/bin/centos7
+            echo "postgrest binary" > /tmp/bin/centos7/postgrest
+      - persist_to_workspace:
+          root: /tmp/bin/centos7
+          paths:
+            - postgrest
+
+  release:
+    steps:
+      - attach_workspace:
+          at: /tmp/bin
+      - run: tree /tmp/bin
 
 workflows:
   version: 2
   build-test-release:
     jobs:
       - build-test
+      - build-centos6-bin
+          requires:
+            - build-test
+      - build-centos7-bin
+          requires:
+            - build-test
+      - release
+          requires:
+            - build-centos6-bin
+            - build-centos7-bin
