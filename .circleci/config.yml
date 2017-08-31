@@ -47,6 +47,7 @@ jobs:
             - ".stack-work"
           key: v1-stack-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
 
+
 workflows:
   version: 2
   build-test-release:
