@@ -55,11 +55,12 @@ jobs:
           name: build binary
           command: |
             mkdir -p /tmp/bin/
-            echo "postgrest binary" > /tmp/bin/postgrest-centos6
+            echo "postgrest binary" > /tmp/bin/postgrest
+            tar cjf postgrest-centos6.tar.xz postgrest
       - persist_to_workspace:
           root: /tmp/bin/
           paths:
-            - postgrest-centos6
+            - postgrest-centos6.tar.xz
 
   build-centos7-bin:
     docker:
@@ -69,22 +70,23 @@ jobs:
           name: build binary
           command: |
             mkdir -p /tmp/bin/
-            echo "postgrest binary" > /tmp/bin/postgrest-centos7
+            echo "postgrest binary" > /tmp/bin/postgrest
+            tar cjf postgrest-centos7.tar.xz postgrest
       - persist_to_workspace:
           root: /tmp/bin/
           paths:
-            - postgrest-centos7
+            - postgrest-centos7.tar.xz
 
   release:
     docker:
-      - image: buildpack-deps:trusty
+      - image: circleci/golang:1.8
     steps:
       - attach_workspace:
           at: /tmp/bin
+      - run: go get -u github.com/tcnksm/ghr
       - run: |
           ls /tmp/bin
-          cat /tmp/bin/postgrest-centos6
-          cat /tmp/bin/postgrest-centos7
+          ghr -t $GITHUB_TOKEN -u $CIRCLE_PROJECT_USERNAME -r $CIRCLE_PROJECT_REPONAME --replace v0.4.3.0 /tmp/bin/
 
 workflows:
   version: 2
