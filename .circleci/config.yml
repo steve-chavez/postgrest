@@ -48,6 +48,8 @@ jobs:
           key: v1-stack-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
 
   build-centos6-bin:
+    docker:
+      - image: alpine:3.4
     steps:
       - run:
           name: build binary
@@ -60,6 +62,8 @@ jobs:
             - postgrest
 
   build-centos7-bin:
+    docker:
+      - image: alpine:3.4
     steps:
       - run:
           name: build binary
@@ -72,6 +76,8 @@ jobs:
             - postgrest
 
   release:
+    docker:
+      - image: alpine:3.4
     steps:
       - attach_workspace:
           at: /tmp/bin
