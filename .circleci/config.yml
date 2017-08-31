@@ -3,7 +3,6 @@ jobs:
   build-test:
     machine: true
     steps:
-      - run: pg_isready -h localhost -p 5432 -U ubuntu
       - checkout
       - restore_cache:
           keys:
@@ -28,7 +27,7 @@ jobs:
           name: run tests
           command: |
             sudo service postgresql start
-            POSTGREST_TEST_CONNECTION=$(test/create_test_db "postgres://ubuntu@localhost" postgrest_test) stack test
+            POSTGREST_TEST_CONNECTION=$(test/create_test_db "postgres://circleci@localhost" postgrest_test) stack test
             test/io-tests.sh
       - run:
           name: run linter
