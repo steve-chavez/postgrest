@@ -4,49 +4,49 @@ jobs:
     machine:
       enabled: true
     steps:
-      - run:
-        name: install stack & dependencies
-        command: |
-          curl -L https://github.com/commercialhaskell/stack/releases/download/v1.1.2/stack-1.1.2-linux-x86_64.tar.gz | tar zx -C /tmp
-          sudo mv /tmp/stack-1.1.2-linux-x86_64/stack /usr/bin
-          sudo apt-get update; sudo apt-get install --only-upgrade binutils
       - checkout
       - restore_cache:
-        keys:
+          keys:
           - v1-stack-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
       - run:
-        name: setup stack
-        command: |
-          stack setup
-          rm -rf $(stack path --dist-dir) $(stack path --local-install-root)
-          stack install hlint packdeps cabal-install
+          name: install stack & dependencies
+          command: |
+            curl -L https://github.com/commercialhaskell/stack/releases/download/v1.1.2/stack-1.1.2-linux-x86_64.tar.gz | tar zx -C /tmp
+            sudo mv /tmp/stack-1.1.2-linux-x86_64/stack /usr/bin
+            sudo apt-get update; sudo apt-get install --only-upgrade binutils
       - run:
-        name: build src and tests
-        command: |
-          stack build --fast -j1
-          stack build --fast --test --no-run-tests
+          name: setup stack
+          command: |
+            stack setup
+            rm -rf $(stack path --dist-dir) $(stack path --local-install-root)
+            stack install hlint packdeps cabal-install
       - run:
-        name: run tests
-        command: |
-          POSTGREST_TEST_CONNECTION=$(test/create_test_db "postgres://ubuntu@localhost" postgrest_test) stack test
-          test/io-tests.sh
+          name: build src and tests
+          command: |
+            stack build --fast -j1
+            stack build --fast --test --no-run-tests
       - run:
-        name: run linter
-        command: git ls-files | grep '\.l\?hs$' | xargs stack exec -- hlint -X QuasiQuotes -X NoPatternSynonyms "$@"
+          name: run tests
+          command: |
+            POSTGREST_TEST_CONNECTION=$(test/create_test_db "postgres://ubuntu@localhost" postgrest_test) stack test
+            test/io-tests.sh
       - run:
-        name: extra build checks
-        command: |
-          stack exec -- cabal update
-          stack exec --no-ghc-package-path -- cabal install --only-d --dry-run
-          stack exec -- packdeps *.cabal || true
-          stack exec -- cabal check
-          stack haddock --no-haddock-deps
-          stack sdist
+          name: run linter
+          command: git ls-files | grep '\.l\?hs$' | xargs stack exec -- hlint -X QuasiQuotes -X NoPatternSynonyms "$@"
+      - run:
+          name: extra build checks
+          command: |
+            stack exec -- cabal update
+            stack exec --no-ghc-package-path -- cabal install --only-d --dry-run
+            stack exec -- packdeps *.cabal || true
+            stack exec -- cabal check
+            stack haddock --no-haddock-deps
+            stack sdist
       - save_cache:
-        paths:
-          - "~/.stack"
-          - ".stack-work"
-        key: v1-stack-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
+          paths:
+            - "~/.stack"
+            - ".stack-work"
+          key: v1-stack-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
 
 workflows:
   version: 2
