@@ -82,13 +82,13 @@ workflows:
   build-test-release:
     jobs:
       - build-test
-      - build-centos6-bin
+      - build-centos6-bin:
           requires:
             - build-test
-      - build-centos7-bin
+      - build-centos7-bin:
           requires:
             - build-test
-      - release
+      - release:
           requires:
             - build-centos6-bin
             - build-centos7-bin
