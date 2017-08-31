@@ -3,6 +3,7 @@ jobs:
   build-test:
     machine: true
     steps:
+      - run: sudo service postgresql start
       - run: pg_isready -h localhost -p 5432 -U ubuntu
       - checkout
       - restore_cache:
