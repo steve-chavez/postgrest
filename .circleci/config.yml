@@ -51,15 +51,33 @@ jobs:
     docker:
       - image: buildpack-deps:trusty
     steps:
+      - checkout
+      - setup_remote_docker
+      - restore_cache:
+          keys:
+          - v1-centos6-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
       - run:
           name: build binary
           command: |
-            echo "postgrest binary" > /tmp/postgrest
+            docker build --rm=false -t centos6 -f docker/distro_release/Dockerfile.centos6 .
+            docker run -it \
+              -v $HOME/.stack:/root/.stack \
+              -v $(pwd):/source \
+              -v /tmp/:/root/.local/bin/ \
+              centos6 build --allow-different-user --install-ghc --copy-bins
+      - run:
+          name: compress binary
+          command: |
             cd /tmp && tar cjf postgrest-centos6.tar.xz postgrest
       - persist_to_workspace:
           root: /tmp
           paths:
             - postgrest-centos6.tar.xz
+      - save_cache:
+          paths:
+            - "~/.stack"
+            - ".stack-work"
+          key: v1-centos6-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
 
   build-centos7-bin:
     docker:
