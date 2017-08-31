@@ -3,6 +3,8 @@ jobs:
   build-test:
     machine: true
     steps:
+      - run: pg_isready -h localhost -p 5433 -U ubuntu
+      - run: pg_isready -h localhost -p 5432 -U ubuntu
       - checkout
       - restore_cache:
           keys:
@@ -15,9 +17,6 @@ jobs:
             sudo apt-get update
             sudo apt-get install libgmp-dev
             sudo apt-get install --only-upgrade binutils
-      - run:
-          name: setup stack
-          command: |
             stack setup
             rm -rf $(stack path --dist-dir) $(stack path --local-install-root)
             stack install hlint packdeps cabal-install
