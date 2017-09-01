@@ -141,6 +141,7 @@ jobs:
             go get -u github.com/tcnksm/ghr
             ghr -t $GITHUB_TOKEN -u $CIRCLE_PROJECT_USERNAME -r $CIRCLE_PROJECT_REPONAME --replace v0.4.3.0 /tmp
 
+
 workflows:
   version: 2
   build-test-release:
