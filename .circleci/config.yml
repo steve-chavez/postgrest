@@ -33,7 +33,7 @@ jobs:
           name: run linter
           command: git ls-files | grep '\.l\?hs$' | xargs stack exec -- hlint -X QuasiQuotes -X NoPatternSynonyms "$@"
       - run:
-          name: extra build checks
+          name: extra checks
           command: |
             stack exec -- cabal update
             stack exec --no-ghc-package-path -- cabal install --only-d --dry-run
@@ -52,6 +52,7 @@ jobs:
       - image: docker:17.07
     steps:
       - checkout
+      - setup_remote_docker
       - restore_cache:
           keys:
           - v1-centos6-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
