@@ -69,7 +69,7 @@ jobs:
           key: v1-centos6-image-{{ checksum "docker/distro_release/Dockerfile.centos6" }}
       - restore_cache:
           keys:
-          - v3-centos6-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
+          - v4-centos6-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
       - run:
           name: build dependencies
           command: |
@@ -120,7 +120,7 @@ jobs:
           key: v1-centos7-image-{{ checksum "docker/distro_release/Dockerfile.centos7" }}
       - restore_cache:
           keys:
-          - v3-centos7-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
+          - v4-centos7-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
       - run:
           name: build dependencies
           command: |
