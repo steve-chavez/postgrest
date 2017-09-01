@@ -78,18 +78,34 @@ jobs:
           key: v1-centos6-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
 
   build-centos7-bin:
-    docker:
-      - image: buildpack-deps:trusty
+    machine: true
     steps:
+      - checkout
+      - restore_cache:
+          keys:
+          - v1-centos7-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
       - run:
           name: build binary
           command: |
-            echo "postgrest binary" > /tmp/postgrest
+            docker build --rm=false -t centos7 -f docker/distro_release/Dockerfile.centos7 docker/distro_release/
+            docker run -it \
+              -v $HOME/.stack:/root/.stack \
+              -v $(pwd):/source \
+              -v /tmp/:/root/.local/bin/ \
+              centos7 build --allow-different-user --install-ghc --copy-bins
+      - run:
+          name: compress binary
+          command: |
             cd /tmp && tar cjf postgrest-centos7.tar.xz postgrest
       - persist_to_workspace:
           root: /tmp
           paths:
             - postgrest-centos7.tar.xz
+      - save_cache:
+          paths:
+            - "~/.stack"
+            - ".stack-work"
+          key: v1-centos7-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
 
   release:
     docker:
