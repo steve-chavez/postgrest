@@ -48,11 +48,9 @@ jobs:
           key: v1-stack-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
 
   build-centos6-bin:
-    docker:
-      - image: docker:17.07
+    machine: true
     steps:
       - checkout
-      - setup_remote_docker
       - restore_cache:
           keys:
           - v1-centos6-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
