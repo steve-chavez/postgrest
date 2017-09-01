@@ -76,7 +76,6 @@ jobs:
             docker run -it \
               -v $HOME/.stack:/root/.stack \
               -v $(pwd):/source \
-              -v /tmp/:/root/.local/bin/ \
               centos6 build --allow-different-user --only-snapshot --install-ghc
       - save_cache:
           paths:
@@ -88,6 +87,7 @@ jobs:
             docker run -it \
               -v $HOME/.stack:/root/.stack \
               -v $(pwd):/source \
+              -v /tmp/:/root/.local/bin/ \
               centos6 build --allow-different-user --copy-bins
       - run:
           name: compress binary
