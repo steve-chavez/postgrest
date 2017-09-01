@@ -2,28 +2,30 @@ version: 2
 
 build-distro-bin: &build-distro-bin
   steps:
-    - run: echo $DISTRO
-    - run: echo 'export DISTRO_DOCKERFILE=docker/distro_release/Dockerfile.$DISTRO' >> $BASH_ENV
     - checkout
+    # cannot interpolate env var and use as a cache key so just copy the Dockerfile to another filename
+    - run: cp docker/distro_release/Dockerfile.$DISTRO docker/distro_release/Dockerfile
+    # hack since cannot use env var as cache key https://discuss.circleci.com/t/cannot-use-circle-yml-environment-variables-in-cache-keys/10994/4
+    - run: echo $DISTRO > DISTRO
     - restore_cache:
         keys:
-        - v1-{{ .Environment.DISTRO }}-image-{{ checksum $DISTRO_DOCKERFILE }}
+        - v1-{{ checksum "DISTRO" }}-image-{{ checksum "docker/distro_release/Dockerfile" }}
     - run:
-        name: build docker image
+        name: load or build docker image
         command: |
-          if [[ -e ~/$DISTRO.tar ]]; then
-            docker load -i ~/$DISTRO.tar
+          if [[ -e ~/image.tar ]]; then
+            docker load -i ~/image.tar
           else
             docker build --rm=false -t $DISTRO -f docker/distro_release/Dockerfile.$DISTRO docker/distro_release/
-            docker save $DISTRO > ~/$DISTRO.tar
+            docker save $DISTRO > ~/image.tar
           fi
     - save_cache:
         paths:
-          - ~/$DISTRO.tar
-        key: v1-{{ .Environment.DISTRO }}-image-{{ checksum $DISTRO_DOCKERFILE }}
+          - ~/image.tar
+        key: v1-{{ checksum "DISTRO" }}-image-{{ checksum "docker/distro_release/Dockerfile" }}
     - restore_cache:
         keys:
-        - v4-{{ .Environment.DISTRO }}-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
+        - v4-{{ checksum "DISTRO" }}-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
     - run:
         name: build dependencies
         command: |
@@ -35,7 +37,7 @@ build-distro-bin: &build-distro-bin
     - save_cache:
         paths:
           - "~/.stack"
-        key: v4-{{ .Environment.DISTRO }}-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
+        key: v4-{{ checksum "DISTRO" }}-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
     - run:
         name: build binary
         command: |
@@ -47,10 +49,6 @@ build-distro-bin: &build-distro-bin
     - run:
         name: compress binary
         command: cd /tmp && tar cjf postgrest-$DISTRO.tar.xz postgrest
-    - persist_to_workspace:
-        root: /tmp
-        paths:
-          - postgrest-{{ .Environment.DISTRO }}.tar.xz
 
 jobs:
   build-test:
@@ -106,11 +104,21 @@ jobs:
     environment:
       - DISTRO: centos6
     <<: *build-distro-bin
+    - persist_to_workspace:
+        root: /tmp
+        paths:
+          - postgrest-centos6.tar.xz
 
   build-centos7-bin:
     machine:
       enabled: true
+    environment:
+      - DISTRO: centos7
     <<: *build-distro-bin
+    - persist_to_workspace:
+        root: /tmp
+        paths:
+          - postgrest-centos7.tar.xz
 
   release:
     docker:
