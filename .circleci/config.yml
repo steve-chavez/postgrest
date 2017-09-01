@@ -54,7 +54,6 @@ build-distro-bin: &build-distro-bin
       paths:
         - postgrest-{{ .Environment.CIRCLE_JOB }}.tar.xz
 
-
 jobs:
   build-test:
     machine: true
@@ -126,13 +125,13 @@ workflows:
   build-test-release:
     jobs:
       - build-test
-      - build-centos6-bin:
+      - centos6:
           requires:
             - build-test
-      - build-centos7-bin:
+      - centos7:
           requires:
             - build-test
       - release:
           requires:
-            - build-centos6-bin
-            - build-centos7-bin
+            - centos6
+            - centos7
