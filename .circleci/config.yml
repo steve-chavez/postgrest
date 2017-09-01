@@ -53,7 +53,6 @@ jobs:
       - checkout
       - restore_cache:
           keys:
-          - v2-centos6-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
           - v1-centos6-image-{{ checksum "docker/distro_release/Dockerfile.centos6" }}
       - run:
           name: build docker image
@@ -64,22 +63,32 @@ jobs:
               docker build --rm=false -t centos6 -f docker/distro_release/Dockerfile.centos6 docker/distro_release/
               docker save centos6 > ~/centos6.tar
             fi
+      - save_cache:
+          paths:
+            - "~/centos6.tar"
+          key: v1-centos6-image-{{ checksum "docker/distro_release/Dockerfile.centos6" }}
+      - restore_cache:
+          keys:
+          - v3-centos6-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
+      - run:
+          name: build dependencies
+          command: |
+            docker run -it \
+              -v $HOME/.stack:/root/.stack \
+              -v $(pwd):/source \
+              -v /tmp/:/root/.local/bin/ \
+              centos6 build --allow-different-user --only-snapshot --install-ghc
+      - save_cache:
+          paths:
+            - "~/.stack"
+          key: v3-centos6-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
       - run:
           name: build binary
           command: |
             docker run -it \
               -v $HOME/.stack:/root/.stack \
               -v $(pwd):/source \
-              -v /tmp/:/root/.local/bin/ \
-              centos6 build --allow-different-user --install-ghc --copy-bins
-      - save_cache:
-          paths:
-            - "~/.stack"
-          key: v2-centos6-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
-      - save_cache:
-          paths:
-            - "~/centos6.tar"
-          key: v1-centos6-image-{{ checksum "docker/distro_release/Dockerfile.centos6" }}
+              centos6 build --allow-different-user --copy-bins
       - run:
           name: compress binary
           command: cd /tmp && tar cjf postgrest-centos6.tar.xz postgrest
@@ -94,7 +103,6 @@ jobs:
       - checkout
       - restore_cache:
           keys:
-          - v2-centos7-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
           - v1-centos7-image-{{ checksum "docker/distro_release/Dockerfile.centos7" }}
       - run:
           name: build docker image
@@ -105,6 +113,24 @@ jobs:
               docker build --rm=false -t centos7 -f docker/distro_release/Dockerfile.centos7 docker/distro_release/
               docker save centos7 > ~/centos7.tar
             fi
+      - save_cache:
+          paths:
+            - "~/centos7.tar"
+          key: v1-centos7-image-{{ checksum "docker/distro_release/Dockerfile.centos7" }}
+      - restore_cache:
+          keys:
+          - v3-centos7-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
+      - run:
+          name: build dependencies
+          command: |
+            docker run -it \
+              -v $HOME/.stack:/root/.stack \
+              -v $(pwd):/source \
+              centos7 build --allow-different-user --only-snapshot --install-ghc
+      - save_cache:
+          paths:
+            - "~/.stack"
+          key: v3-centos7-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
       - run:
           name: build binary
           command: |
@@ -112,15 +138,7 @@ jobs:
               -v $HOME/.stack:/root/.stack \
               -v $(pwd):/source \
               -v /tmp/:/root/.local/bin/ \
-              centos7 build --allow-different-user --install-ghc --copy-bins
-      - save_cache:
-          paths:
-            - "~/.stack"
-          key: v2-centos7-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
-      - save_cache:
-          paths:
-            - "~/centos7.tar"
-          key: v1-centos7-image-{{ checksum "docker/distro_release/Dockerfile.centos7" }}
+              centos7 build --allow-different-user --copy-bins
       - run:
           name: compress binary
           command: cd /tmp && tar cjf postgrest-centos7.tar.xz postgrest
