@@ -1,4 +1,55 @@
 version: 2
+
+defaults: &defaults
+  steps:
+    - checkout
+    - restore_cache:
+        keys:
+        - v1-$DISTRO-image-{{ checksum "docker/distro_release/Dockerfile.$DISTRO" }}
+    - run:
+        name: build docker image
+        command: |
+          if [[ -e ~/$DISTRO.tar ]]; then
+            docker load -i ~/$DISTRO.tar
+          else
+            docker build --rm=false -t $DISTRO -f docker/distro_release/Dockerfile.$DISTRO docker/distro_release/
+            docker save $DISTRO > ~/$DISTRO.tar
+          fi
+    - save_cache:
+        paths:
+          - ~/$DISTRO.tar
+        key: v1-$DISTRO-image-{{ checksum "docker/distro_release/Dockerfile.$DISTRO" }}
+    - restore_cache:
+        keys:
+        - v4-$DISTRO-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
+    - run:
+        name: build dependencies
+        command: |
+          docker run -it \
+            -v $HOME/.stack:/root/.stack \
+            -v $(pwd):/source \
+            $DISTRO build --allow-different-user --only-snapshot --install-ghc
+          sudo chown -R circleci:circleci ~/.stack
+    - save_cache:
+        paths:
+          - "~/.stack"
+        key: v4-$DISTRO-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
+    - run:
+        name: build binary
+        command: |
+          docker run -it \
+            -v $HOME/.stack:/root/.stack \
+            -v $(pwd):/source \
+            -v /tmp/:/root/.local/bin/ \
+            $DISTRO build --allow-different-user --copy-bins
+    - run:
+        name: compress binary
+        command: cd /tmp && tar cjf postgrest-$DISTRO.tar.xz postgrest
+    - persist_to_workspace:
+        root: /tmp
+        paths:
+          - postgrest-$DISTRO.tar.xz
+
 jobs:
   build-test:
     machine: true
@@ -48,106 +99,18 @@ jobs:
           key: v1-stack-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
 
   build-centos6-bin:
-    machine: true
-    steps:
-      - checkout
-      - restore_cache:
-          keys:
-          - v1-centos6-image-{{ checksum "docker/distro_release/Dockerfile.centos6" }}
-      - run:
-          name: build docker image
-          command: |
-            if [[ -e ~/centos6.tar ]]; then
-              docker load -i ~/centos6.tar
-            else
-              docker build --rm=false -t centos6 -f docker/distro_release/Dockerfile.centos6 docker/distro_release/
-              docker save centos6 > ~/centos6.tar
-            fi
-      - save_cache:
-          paths:
-            - "~/centos6.tar"
-          key: v1-centos6-image-{{ checksum "docker/distro_release/Dockerfile.centos6" }}
-      - restore_cache:
-          keys:
-          - v4-centos6-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
-      - run:
-          name: build dependencies
-          command: |
-            docker run -it \
-              -v $HOME/.stack:/root/.stack \
-              -v $(pwd):/source \
-              centos6 build --allow-different-user --only-snapshot --install-ghc
-            sudo chown -R circleci:circleci ~/.stack
-      - save_cache:
-          paths:
-            - "~/.stack"
-          key: v4-centos6-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
-      - run:
-          name: build binary
-          command: |
-            docker run -it \
-              -v $HOME/.stack:/root/.stack \
-              -v $(pwd):/source \
-              -v /tmp/:/root/.local/bin/ \
-              centos6 build --allow-different-user --copy-bins
-      - run:
-          name: compress binary
-          command: cd /tmp && tar cjf postgrest-centos6.tar.xz postgrest
-      - persist_to_workspace:
-          root: /tmp
-          paths:
-            - postgrest-centos6.tar.xz
+    machine:
+      enabled: true
+      environment:
+        - DISTRO: centos6
+    <<: *defaults
 
   build-centos7-bin:
-    machine: true
-    steps:
-      - checkout
-      - restore_cache:
-          keys:
-          - v1-centos7-image-{{ checksum "docker/distro_release/Dockerfile.centos7" }}
-      - run:
-          name: build docker image
-          command: |
-            if [[ -e ~/centos7.tar ]]; then
-              docker load -i ~/centos7.tar
-            else
-              docker build --rm=false -t centos7 -f docker/distro_release/Dockerfile.centos7 docker/distro_release/
-              docker save centos7 > ~/centos7.tar
-            fi
-      - save_cache:
-          paths:
-            - "~/centos7.tar"
-          key: v1-centos7-image-{{ checksum "docker/distro_release/Dockerfile.centos7" }}
-      - restore_cache:
-          keys:
-          - v4-centos7-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
-      - run:
-          name: build dependencies
-          command: |
-            docker run -it \
-              -v $HOME/.stack:/root/.stack \
-              -v $(pwd):/source \
-              centos7 build --allow-different-user --only-snapshot --install-ghc
-            sudo chown -R circleci:circleci ~/.stack
-      - save_cache:
-          paths:
-            - "~/.stack"
-          key: v4-centos7-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
-      - run:
-          name: build binary
-          command: |
-            docker run -it \
-              -v $HOME/.stack:/root/.stack \
-              -v $(pwd):/source \
-              -v /tmp/:/root/.local/bin/ \
-              centos7 build --allow-different-user --copy-bins
-      - run:
-          name: compress binary
-          command: cd /tmp && tar cjf postgrest-centos7.tar.xz postgrest
-      - persist_to_workspace:
-          root: /tmp
-          paths:
-            - postgrest-centos7.tar.xz
+    machine:
+      enabled: true
+      environment:
+        - DISTRO: centos7
+    <<: *defaults
 
   release:
     docker:
@@ -160,7 +123,6 @@ jobs:
           command: |
             go get -u github.com/tcnksm/ghr
             ghr -t $GITHUB_TOKEN -u $CIRCLE_PROJECT_USERNAME -r $CIRCLE_PROJECT_REPONAME --replace v0.4.3.0 /tmp
-
 
 workflows:
   version: 2
