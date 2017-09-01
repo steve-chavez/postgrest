@@ -4,7 +4,7 @@ build-distro-bin: &build-distro-bin
   machine: true
   steps:
     - checkout
-    - echo $CIRCLE_JOB
+    - run: echo $CIRCLE_JOB
     # cannot interpolate env var and use as a cache key so just copy the Dockerfile to another filename
     - run: cp docker/distro_release/Dockerfile.$CIRCLE_JOB docker/distro_release/Dockerfile
     - restore_cache:
