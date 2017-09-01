@@ -54,7 +54,10 @@ defaults: &defaults
 jobs:
   build-test:
     machine: true
+    environment:
+      - DISTRO: centos6
     steps:
+      - run: echo $DISTRO
       - checkout
       - restore_cache:
           keys:
