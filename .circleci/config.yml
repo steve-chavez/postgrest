@@ -77,10 +77,11 @@ jobs:
               -v $HOME/.stack:/root/.stack \
               -v $(pwd):/source \
               centos6 build --allow-different-user --only-snapshot --install-ghc
+            sudo chown -R circleci:circleci ~/.stack
       - save_cache:
           paths:
             - "~/.stack"
-          key: v3-centos6-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
+          key: v4-centos6-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
       - run:
           name: build binary
           command: |
@@ -127,10 +128,11 @@ jobs:
               -v $HOME/.stack:/root/.stack \
               -v $(pwd):/source \
               centos7 build --allow-different-user --only-snapshot --install-ghc
+            sudo chown -R circleci:circleci ~/.stack
       - save_cache:
           paths:
             - "~/.stack"
-          key: v3-centos7-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
+          key: v4-centos7-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
       - run:
           name: build binary
           command: |
