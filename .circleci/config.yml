@@ -49,7 +49,7 @@ jobs:
 
   build-centos6-bin:
     docker:
-      - image: buildpack-deps:trusty
+      - image: docker:17.07
     steps:
       - checkout
       - setup_remote_docker
