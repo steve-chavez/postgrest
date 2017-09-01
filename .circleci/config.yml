@@ -1,12 +1,13 @@
 version: 2
 
-defaults: &defaults
+build-distro-bin: &build-distro-bin
   steps:
     - run: echo $DISTRO
+    - run: echo 'export DISTRO_DOCKERFILE=docker/distro_release/Dockerfile.$DISTRO' >> $BASH_ENV
     - checkout
     - restore_cache:
         keys:
-        - v1-$DISTRO-image-{{ checksum "docker/distro_release/Dockerfile.$DISTRO" }}
+        - v1-{{ .Environment.DISTRO }}-image-{{ checksum $DISTRO_DOCKERFILE }}
     - run:
         name: build docker image
         command: |
@@ -19,10 +20,10 @@ defaults: &defaults
     - save_cache:
         paths:
           - ~/$DISTRO.tar
-        key: v1-$DISTRO-image-{{ checksum "docker/distro_release/Dockerfile.$DISTRO" }}
+        key: v1-{{ .Environment.DISTRO }}-image-{{ checksum $DISTRO_DOCKERFILE }}
     - restore_cache:
         keys:
-        - v4-$DISTRO-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
+        - v4-{{ .Environment.DISTRO }}-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
     - run:
         name: build dependencies
         command: |
@@ -34,7 +35,7 @@ defaults: &defaults
     - save_cache:
         paths:
           - "~/.stack"
-        key: v4-$DISTRO-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
+        key: v4-{{ .Environment.DISTRO }}-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
     - run:
         name: build binary
         command: |
@@ -49,7 +50,7 @@ defaults: &defaults
     - persist_to_workspace:
         root: /tmp
         paths:
-          - postgrest-$DISTRO.tar.xz
+          - postgrest-{{ .Environment.DISTRO }}.tar.xz
 
 jobs:
   build-test:
@@ -104,62 +105,12 @@ jobs:
       enabled: true
     environment:
       - DISTRO: centos6
-    <<: *defaults
+    <<: *build-distro-bin
 
   build-centos7-bin:
     machine:
       enabled: true
-    environment:
-      - DISTRO: centos7
-    steps:
-      - run: echo $DISTRO
-      - checkout
-      - restore_cache:
-          keys:
-          - v1-$DISTRO-image-{{ checksum "docker/distro_release/Dockerfile.$DISTRO" }}
-      - run:
-          name: build docker image
-          command: |
-            if [[ -e ~/$DISTRO.tar ]]; then
-              docker load -i ~/$DISTRO.tar
-            else
-              docker build --rm=false -t $DISTRO -f docker/distro_release/Dockerfile.$DISTRO docker/distro_release/
-              docker save $DISTRO > ~/$DISTRO.tar
-            fi
-      - save_cache:
-          paths:
-            - ~/$DISTRO.tar
-          key: v1-$DISTRO-image-{{ checksum "docker/distro_release/Dockerfile.$DISTRO" }}
-      - restore_cache:
-          keys:
-          - v4-$DISTRO-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
-      - run:
-          name: build dependencies
-          command: |
-            docker run -it \
-              -v $HOME/.stack:/root/.stack \
-              -v $(pwd):/source \
-              $DISTRO build --allow-different-user --only-snapshot --install-ghc
-            sudo chown -R circleci:circleci ~/.stack
-      - save_cache:
-          paths:
-            - "~/.stack"
-          key: v4-$DISTRO-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
-      - run:
-          name: build binary
-          command: |
-            docker run -it \
-              -v $HOME/.stack:/root/.stack \
-              -v $(pwd):/source \
-              -v /tmp/:/root/.local/bin/ \
-              $DISTRO build --allow-different-user --copy-bins
-      - run:
-          name: compress binary
-          command: cd /tmp && tar cjf postgrest-$DISTRO.tar.xz postgrest
-      - persist_to_workspace:
-          root: /tmp
-          paths:
-            - postgrest-$DISTRO.tar.xz
+    <<: *build-distro-bin
 
   release:
     docker:
