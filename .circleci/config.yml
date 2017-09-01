@@ -2,7 +2,7 @@ version: 2
 
 defaults: &defaults
   steps:
-    - echo $DISTRO
+    - run: echo $DISTRO
     - checkout
     - restore_cache:
         keys:
@@ -112,7 +112,7 @@ jobs:
       environment:
         - DISTRO: centos7
     steps:
-      - echo $DISTRO
+      - run: echo $DISTRO
       - checkout
       - restore_cache:
           keys:
