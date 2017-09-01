@@ -50,9 +50,9 @@ build-distro-bin: &build-distro-bin
         name: compress binary
         command: cd /tmp && tar cjf postgrest-$CIRCLE_JOB.tar.xz postgrest
     - persist_to_workspace:
-      root: /tmp
-      paths:
-        - postgrest-{{ .Environment.CIRCLE_JOB }}.tar.xz
+        root: /tmp
+        paths:
+          - postgrest-{{ .Environment.CIRCLE_JOB }}.tar.xz
 
 jobs:
   build-test:
