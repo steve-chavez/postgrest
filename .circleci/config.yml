@@ -54,10 +54,7 @@ defaults: &defaults
 jobs:
   build-test:
     machine: true
-    environment:
-      - DISTRO: centos6
     steps:
-      - run: echo $DISTRO
       - checkout
       - restore_cache:
           keys:
@@ -105,15 +102,15 @@ jobs:
   build-centos6-bin:
     machine:
       enabled: true
-      environment:
-        - DISTRO: centos6
+    environment:
+      - DISTRO: centos6
     <<: *defaults
 
   build-centos7-bin:
     machine:
       enabled: true
-      environment:
-        - DISTRO: centos7
+    environment:
+      - DISTRO: centos7
     steps:
       - run: echo $DISTRO
       - checkout
