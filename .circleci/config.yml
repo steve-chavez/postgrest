@@ -54,15 +54,15 @@ jobs:
       - restore_cache:
           keys:
           - v1-centos6-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
-          - v1-centos6-image
+          - v1-centos6-image-{{ checksum "docker/distro_release/Dockerfile.centos6" }}
       - run:
           name: build docker image
           command: |
-            if [[ -e ~/docker/centos6.tar ]]; then
-              docker load -i ~/docker/centos6.tar
+            if [[ -e ~/centos6.tar ]]; then
+              docker load -i ~/centos6.tar
             else
               docker build --rm=false -t centos6 -f docker/distro_release/Dockerfile.centos6 docker/distro_release/
-              docker save centos6 > ~/docker/centos6.tar
+              docker save centos6 > ~/centos6.tar
             fi
       - run:
           name: build binary
@@ -87,8 +87,8 @@ jobs:
           key: v1-centos6-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
       - save_cache:
           paths:
-            - "~/docker"
-          key: v1-centos6-image
+            - "~/centos6.tar"
+          key: v1-centos6-image-{{ checksum "docker/distro_release/Dockerfile.centos6" }}
 
   build-centos7-bin:
     machine: true
@@ -97,15 +97,15 @@ jobs:
       - restore_cache:
           keys:
           - v1-centos7-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
-          - v1-centos7-image
+          - v1-centos7-image-{{ checksum "docker/distro_release/Dockerfile.centos7" }}
       - run:
           name: build docker image
           command: |
-            if [[ -e ~/docker/centos7.tar ]]; then
-              docker load -i ~/docker/centos7.tar
+            if [[ -e ~/centos7.tar ]]; then
+              docker load -i ~/centos7.tar
             else
               docker build --rm=false -t centos7 -f docker/distro_release/Dockerfile.centos7 docker/distro_release/
-              docker save centos7 > ~/docker/centos7.tar
+              docker save centos7 > ~/centos7.tar
             fi
       - run:
           name: build binary
@@ -130,8 +130,8 @@ jobs:
           key: v1-centos7-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
       - save_cache:
           paths:
-            - "~/docker"
-          key: v1-centos7-image
+            - "~/centos7.tar"
+          key: v1-centos7-image-{{ checksum "docker/distro_release/Dockerfile.centos7" }}
 
   release:
     docker:
