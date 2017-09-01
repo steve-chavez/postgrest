@@ -52,14 +52,13 @@ jobs:
       - image: docker:17.07
     steps:
       - checkout
-      - setup_remote_docker
       - restore_cache:
           keys:
           - v1-centos6-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
       - run:
           name: build binary
           command: |
-            docker build --rm=false -t centos6 -f docker/distro_release/Dockerfile.centos6 .
+            docker build --rm=false -t centos6 -f docker/distro_release/Dockerfile.centos6 docker/distro_release/
             docker run -it \
               -v $HOME/.stack:/root/.stack \
               -v $(pwd):/source \
