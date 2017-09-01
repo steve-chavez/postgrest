@@ -53,7 +53,7 @@ jobs:
       - checkout
       - restore_cache:
           keys:
-          - v1-centos6-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
+          - v2-centos6-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
           - v1-centos6-image-{{ checksum "docker/distro_release/Dockerfile.centos6" }}
       - run:
           name: build docker image
@@ -72,23 +72,21 @@ jobs:
               -v $(pwd):/source \
               -v /tmp/:/root/.local/bin/ \
               centos6 build --allow-different-user --install-ghc --copy-bins
-      - run:
-          name: compress binary
-          command: cd /tmp && tar cjf postgrest-centos6.tar.xz postgrest
-
-      - persist_to_workspace:
-          root: /tmp
-          paths:
-            - postgrest-centos6.tar.xz
       - save_cache:
           paths:
             - "~/.stack"
-            - ".stack-work"
-          key: v1-centos6-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
+          key: v2-centos6-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
       - save_cache:
           paths:
             - "~/centos6.tar"
           key: v1-centos6-image-{{ checksum "docker/distro_release/Dockerfile.centos6" }}
+      - run:
+          name: compress binary
+          command: cd /tmp && tar cjf postgrest-centos6.tar.xz postgrest
+      - persist_to_workspace:
+          root: /tmp
+          paths:
+            - postgrest-centos6.tar.xz
 
   build-centos7-bin:
     machine: true
@@ -96,7 +94,7 @@ jobs:
       - checkout
       - restore_cache:
           keys:
-          - v1-centos7-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
+          - v2-centos7-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
           - v1-centos7-image-{{ checksum "docker/distro_release/Dockerfile.centos7" }}
       - run:
           name: build docker image
@@ -115,23 +113,21 @@ jobs:
               -v $(pwd):/source \
               -v /tmp/:/root/.local/bin/ \
               centos7 build --allow-different-user --install-ghc --copy-bins
-      - run:
-          name: compress binary
-          command: cd /tmp && tar cjf postgrest-centos7.tar.xz postgrest
-
-      - persist_to_workspace:
-          root: /tmp
-          paths:
-            - postgrest-centos7.tar.xz
       - save_cache:
           paths:
             - "~/.stack"
-            - ".stack-work"
-          key: v1-centos7-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
+          key: v2-centos7-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
       - save_cache:
           paths:
             - "~/centos7.tar"
           key: v1-centos7-image-{{ checksum "docker/distro_release/Dockerfile.centos7" }}
+      - run:
+          name: compress binary
+          command: cd /tmp && tar cjf postgrest-centos7.tar.xz postgrest
+      - persist_to_workspace:
+          root: /tmp
+          paths:
+            - postgrest-centos7.tar.xz
 
   release:
     docker:
