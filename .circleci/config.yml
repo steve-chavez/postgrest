@@ -99,6 +99,7 @@ jobs:
             - ".stack-work"
           key: v1-stack-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
 
+
   centos6:
     <<: *build-distro-bin
 
@@ -110,6 +111,7 @@ jobs:
 
   ubuntui386:
     <<: *build-distro-bin
+
 
   release:
     docker:
