@@ -8,7 +8,7 @@ build-distro-bin: &build-distro-bin
     - run: cp docker/distro_release/Dockerfile.$CIRCLE_JOB docker/distro_release/Dockerfile
     - restore_cache:
         keys:
-        - v1-{{ .Environment.CIRCLE_JOB }}-image-{{ checksum "docker/distro_release/Dockerfile" }}
+        - v2-{{ .Environment.CIRCLE_JOB }}-image-{{ checksum "docker/distro_release/Dockerfile" }}
     - restore_cache:
         keys:
         - v5-{{ .Environment.CIRCLE_JOB }}-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
@@ -43,8 +43,8 @@ build-distro-bin: &build-distro-bin
           - bin/*
     - save_cache:
         paths:
-          - ~/{{ .Environment.CIRCLE_JOB }}.tar
-        key: v1-{{ .Environment.CIRCLE_JOB }}-image-{{ checksum "docker/distro_release/Dockerfile" }}
+          - ~/$CIRCLE_JOB.tar
+        key: v2-{{ .Environment.CIRCLE_JOB }}-image-{{ checksum "docker/distro_release/Dockerfile" }}
     - save_cache:
         paths:
           - "~/.stack"
