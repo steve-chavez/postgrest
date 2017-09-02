@@ -44,13 +44,15 @@ build-distro-bin: &build-distro-bin
           docker run -it \
             -v $HOME/.stack:/root/.stack \
             -v $(pwd):/source \
-            -v /tmp/:/root/.local/bin/ \
+            -v $HOME/bin:/root/.local/bin/ \
             $CIRCLE_JOB build --allow-different-user --copy-bins
     - run:
         name: compress binary
-        command: cd /tmp && tar cjf postgrest-$CIRCLE_JOB.tar.xz postgrest
+        command: |
+          cd ~/bin && tar cjf postgrest-$CIRCLE_JOB.tar.xz postgrest
+          ls ~/bin
     - persist_to_workspace:
-        root: /tmp
+        root: ~/bin
         paths:
           - postgrest-{{ .Environment.CIRCLE_JOB }}.tar.xz
 
