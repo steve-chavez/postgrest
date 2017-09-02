@@ -48,7 +48,7 @@ build-distro-bin: &build-distro-bin
             $CIRCLE_JOB build --allow-different-user --copy-bins
     - run:
         name: compress binary
-        command: cd ~/bin && tar cjf postgrest-$CIRCLE_JOB.tar.xz postgrest
+        command: cd ~/bin && tar cjf postgrest-$CIRCLE_JOB.tar.xz --remove-files postgrest
     - persist_to_workspace:
         root: /home/circleci/
         paths:
