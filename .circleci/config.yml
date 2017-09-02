@@ -4,12 +4,14 @@ build-distro-bin: &build-distro-bin
   machine: true
   steps:
     - checkout
-    - run: echo $CIRCLE_JOB
     # cannot interpolate env var and use as a cache key so just copy the Dockerfile to another filename
     - run: cp docker/distro_release/Dockerfile.$CIRCLE_JOB docker/distro_release/Dockerfile
     - restore_cache:
         keys:
         - v1-{{ .Environment.CIRCLE_JOB }}-image-{{ checksum "docker/distro_release/Dockerfile" }}
+    - restore_cache:
+        keys:
+        - v5-{{ .Environment.CIRCLE_JOB }}-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
     - run:
         name: load or build docker image
         command: |
@@ -19,25 +21,6 @@ build-distro-bin: &build-distro-bin
             docker build --rm=false -t $CIRCLE_JOB -f docker/distro_release/Dockerfile.$CIRCLE_JOB docker/distro_release/
             docker save $CIRCLE_JOB > ~/$CIRCLE_JOB.tar
           fi
-    - save_cache:
-        paths:
-          - ~/{{ .Environment.CIRCLE_JOB }}.tar
-        key: v1-{{ .Environment.CIRCLE_JOB }}-image-{{ checksum "docker/distro_release/Dockerfile" }}
-    - restore_cache:
-        keys:
-        - v4-{{ .Environment.CIRCLE_JOB }}-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
-    - run:
-        name: build dependencies
-        command: |
-          docker run -it \
-            -v $HOME/.stack:/root/.stack \
-            -v $(pwd):/source \
-            $CIRCLE_JOB build --allow-different-user --only-snapshot --install-ghc
-          sudo chown -R circleci:circleci ~/.stack
-    - save_cache:
-        paths:
-          - "~/.stack"
-        key: v4-{{ .Environment.CIRCLE_JOB }}-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
     - run:
         name: build binary
         command: |
@@ -45,17 +28,28 @@ build-distro-bin: &build-distro-bin
             -v $HOME/.stack:/root/.stack \
             -v $(pwd):/source \
             -v $HOME/bin/:/root/.local/bin/ \
-            $CIRCLE_JOB build --allow-different-user --copy-bins
+            $CIRCLE_JOB build --allow-different-user --install-ghc --copy-bins
+          # volumes owned by root if chown is not done the save_cache step fails silently
+          sudo chown -R circleci:circleci ~/.stack .stack-work
     - run:
         name: compress binary
         command: |
           mkdir -p /tmp/workspace/bin
           cd /tmp/workspace/bin
-          tar cjf postgrest-$CIRCLE_JOB.tar.xz -C ~/bin postgrest
+          tar cjf postgrest-$CIRCLE_TAG-$CIRCLE_JOB.tar.xz -C ~/bin postgrest
     - persist_to_workspace:
         root: /tmp/workspace
         paths:
           - bin/*
+    - save_cache:
+        paths:
+          - ~/{{ .Environment.CIRCLE_JOB }}.tar
+        key: v1-{{ .Environment.CIRCLE_JOB }}-image-{{ checksum "docker/distro_release/Dockerfile" }}
+    - save_cache:
+        paths:
+          - "~/.stack"
+          - ".stack-work"
+        key: v5-{{ .Environment.CIRCLE_JOB }}-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
 
 jobs:
   build-test:
@@ -111,31 +105,74 @@ jobs:
   centos7:
     <<: *build-distro-bin
 
+  ubuntu:
+    <<: *build-distro-bin
+
+  ubuntui386:
+    <<: *build-distro-bin
+
   release:
     docker:
       - image: circleci/golang:1.8
     steps:
       - attach_workspace:
           at: /tmp/workspace
+      - checkout
       - run:
-          name: upload bins to github release
+          name: add body and tars to github release
           command: |
-            ls /tmp/workspace/bin
             go get -u github.com/tcnksm/ghr
-            ghr -t $GITHUB_TOKEN -u $CIRCLE_PROJECT_USERNAME -r $CIRCLE_PROJECT_REPONAME --replace v0.4.3.0 /tmp/workspace/bin
+            START=$(echo $CIRCLE_TAG | cut -c2-)
+            END='## \['
+            BODY=$(sed -n "1,/$START/d;/$END/q;p" CHANGELOG.md)
+            ghr -t $GITHUB_TOKEN -u $CIRCLE_PROJECT_USERNAME -r $CIRCLE_PROJECT_REPONAME -b "$BODY" --replace v0.4.3.0 /tmp/workspace/bin
 
 workflows:
   version: 2
   build-test-release:
     jobs:
-      - build-test
+      - build-test:
+          filters:
+            tags:
+              only: /v[0-9]+(\.[0-9]+)*/
       - centos6:
           requires:
             - build-test
+          filters:
+            tags:
+              only: /v[0-9]+(\.[0-9]+)*/
+            branches:
+              ignore: /.*/
       - centos7:
           requires:
             - build-test
+          filters:
+            tags:
+              only: /v[0-9]+(\.[0-9]+)*/
+            branches:
+              ignore: /.*/
+      - ubuntu:
+          requires:
+            - build-test
+          filters:
+            tags:
+              only: /v[0-9]+(\.[0-9]+)*/
+            branches:
+              ignore: /.*/
+      - ubuntui386:
+          requires:
+            - build-test
+          filters:
+            tags:
+              only: /v[0-9]+(\.[0-9]+)*/
+            branches:
+              ignore: /.*/
       - release:
           requires:
             - centos6
             - centos7
+            - ubuntu
+            - ubuntui386
+          filters:
+            tags:
+              only: /v[0-9]+(\.[0-9]+)*/
