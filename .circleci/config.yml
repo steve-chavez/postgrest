@@ -48,9 +48,12 @@ build-distro-bin: &build-distro-bin
             $CIRCLE_JOB build --allow-different-user --copy-bins
     - run:
         name: compress binary
-        command: cd ~/bin && tar cjf postgrest-$CIRCLE_JOB.tar.xz --remove-files postgrest
+        command: |
+          mkdir -p /tmp/workspace/bin
+          cd /tmp/workspace/bin
+          tar cjf postgrest-$CIRCLE_JOB.tar.xz -C ~/bin postgrest
     - persist_to_workspace:
-        root: /home/circleci/
+        root: /tmp/workspace
         paths:
           - bin/*
 
@@ -113,12 +116,13 @@ jobs:
       - image: circleci/golang:1.8
     steps:
       - attach_workspace:
-          at: ~/bin
+          at: /tmp/workspace
       - run:
           name: upload bins to github release
           command: |
+            ls /tmp/workspace/bin
             go get -u github.com/tcnksm/ghr
-            ghr -t $GITHUB_TOKEN -u $CIRCLE_PROJECT_USERNAME -r $CIRCLE_PROJECT_REPONAME --replace v0.4.3.0 ~/bin
+            ghr -t $GITHUB_TOKEN -u $CIRCLE_PROJECT_USERNAME -r $CIRCLE_PROJECT_REPONAME --replace v0.4.3.0 /tmp/workspace/bin
 
 workflows:
   version: 2
