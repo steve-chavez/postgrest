@@ -1,59 +1,5 @@
 version: 2
 
-build-distro-bin: &build-distro-bin
-  machine: true
-  steps:
-    - checkout
-    - run: echo $CIRCLE_JOB
-    # cannot interpolate env var and use as a cache key so just copy the Dockerfile to another filename
-    - run: cp docker/distro_release/Dockerfile.$CIRCLE_JOB docker/distro_release/Dockerfile
-    - restore_cache:
-        keys:
-        - v1-{{ .Environment.CIRCLE_JOB }}-image-{{ checksum "docker/distro_release/Dockerfile" }}
-    - run:
-        name: load or build docker image
-        command: |
-          if [[ -e ~/$CIRCLE_JOB.tar ]]; then
-            docker load -i ~/$CIRCLE_JOB.tar
-          else
-            docker build --rm=false -t $CIRCLE_JOB -f docker/distro_release/Dockerfile.$CIRCLE_JOB docker/distro_release/
-            docker save $CIRCLE_JOB > ~/$CIRCLE_JOB.tar
-          fi
-    - save_cache:
-        paths:
-          - ~/{{ .Environment.CIRCLE_JOB }}.tar
-        key: v1-{{ .Environment.CIRCLE_JOB }}-image-{{ checksum "docker/distro_release/Dockerfile" }}
-    - restore_cache:
-        keys:
-        - v4-{{ .Environment.CIRCLE_JOB }}-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
-    - run:
-        name: build dependencies
-        command: |
-          docker run -it \
-            -v $HOME/.stack:/root/.stack \
-            -v $(pwd):/source \
-            $CIRCLE_JOB build --allow-different-user --only-snapshot --install-ghc
-          sudo chown -R circleci:circleci ~/.stack
-    - save_cache:
-        paths:
-          - "~/.stack"
-        key: v4-{{ .Environment.CIRCLE_JOB }}-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
-    - run:
-        name: build binary
-        command: |
-          docker run -it \
-            -v $HOME/.stack:/root/.stack \
-            -v $(pwd):/source \
-            -v $HOME/bin/:/root/.local/bin/ \
-            $CIRCLE_JOB build --allow-different-user --copy-bins
-    - run:
-        name: compress binary
-        command: cd ~/bin && tar cjf postgrest-$CIRCLE_JOB.tar.xz --remove-files postgrest
-    - persist_to_workspace:
-        root: /home/circleci/
-        paths:
-          - bin/*
-
 jobs:
   build-test:
     machine: true
@@ -107,6 +53,60 @@ jobs:
 
   centos7:
     <<: *build-distro-bin
+
+  build-distro-bin: &build-distro-bin
+    machine: true
+    steps:
+      - checkout
+      - run: echo $CIRCLE_JOB
+      # cannot interpolate env var and use as a cache key so just copy the Dockerfile to another filename
+      - run: cp docker/distro_release/Dockerfile.$CIRCLE_JOB docker/distro_release/Dockerfile
+      - restore_cache:
+          keys:
+          - v1-{{ .Environment.CIRCLE_JOB }}-image-{{ checksum "docker/distro_release/Dockerfile" }}
+      - run:
+          name: load or build docker image
+          command: |
+            if [[ -e ~/$CIRCLE_JOB.tar ]]; then
+              docker load -i ~/$CIRCLE_JOB.tar
+            else
+              docker build --rm=false -t $CIRCLE_JOB -f docker/distro_release/Dockerfile.$CIRCLE_JOB docker/distro_release/
+              docker save $CIRCLE_JOB > ~/$CIRCLE_JOB.tar
+            fi
+      - save_cache:
+          paths:
+            - ~/{{ .Environment.CIRCLE_JOB }}.tar
+          key: v1-{{ .Environment.CIRCLE_JOB }}-image-{{ checksum "docker/distro_release/Dockerfile" }}
+      - restore_cache:
+          keys:
+          - v4-{{ .Environment.CIRCLE_JOB }}-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
+      - run:
+          name: build dependencies
+          command: |
+            docker run -it \
+              -v $HOME/.stack:/root/.stack \
+              -v $(pwd):/source \
+              $CIRCLE_JOB build --allow-different-user --only-snapshot --install-ghc
+            sudo chown -R circleci:circleci ~/.stack
+      - save_cache:
+          paths:
+            - "~/.stack"
+          key: v4-{{ .Environment.CIRCLE_JOB }}-dependencies-{{ checksum "postgrest.cabal" }}-{{ checksum "stack.yaml" }}
+      - run:
+          name: build binary
+          command: |
+            docker run -it \
+              -v $HOME/.stack:/root/.stack \
+              -v $(pwd):/source \
+              -v $HOME/bin/:/root/.local/bin/ \
+              $CIRCLE_JOB build --allow-different-user --copy-bins
+      - run:
+          name: compress binary
+          command: cd ~/bin && tar cjf postgrest-$CIRCLE_JOB.tar.xz --remove-files postgrest
+      - persist_to_workspace:
+          root: /home/circleci/
+          paths:
+            - bin/*
 
   release:
     docker:
