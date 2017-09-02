@@ -36,7 +36,7 @@ build-distro-bin: &build-distro-bin
         command: |
           mkdir -p /tmp/workspace/bin
           cd /tmp/workspace/bin
-          tar cjf postgrest-$CIRCLE_TAG-$CIRCLE_JOB.tar.xz -C ~/bin postgrest
+          tar cvJf postgrest-$CIRCLE_TAG-$CIRCLE_JOB.tar.xz -C ~/bin postgrest
     - persist_to_workspace:
         root: /tmp/workspace
         paths:
@@ -125,30 +125,23 @@ jobs:
             START=$(echo $CIRCLE_TAG | cut -c2-)
             END='## \['
             BODY=$(sed -n "1,/$START/d;/$END/q;p" CHANGELOG.md)
-            ghr -t $GITHUB_TOKEN -u $CIRCLE_PROJECT_USERNAME -r $CIRCLE_PROJECT_REPONAME -b "$BODY" --replace v0.4.3.0 /tmp/workspace/bin
-
-  release-docker:
-    docker:
-      - image: circleci/golang:1.8
-    steps:
-      - checkout
+            ghr -t $GITHUB_TOKEN -u $CIRCLE_PROJECT_USERNAME -r $CIRCLE_PROJECT_REPONAME -b "$BODY" --replace $CIRCLE_TAG /tmp/workspace/bin
+          name: add body and tars to github release
       - setup_remote_docker
       - run:
           name: publish docker image
           command: |
-            VERSION=$(echo v0.4.3.0 | cut -c2-)
-            docker build --build-arg POSTGREST_VERSION=$VERSION -t postgrest ./docker/
+            docker build --build-arg POSTGREST_VERSION=$CIRCLE_TAG -t postgrest ./docker/
             docker login -u $DOCKER_USER -p $DOCKER_PASS
-            docker tag postgrest stevechavez/postgrest:$VERSION
+            docker tag postgrest stevechavez/postgrest:$CIRCLE_TAG
+            docker push stevechavez/postgrest:$CIRCLE_TAG
             docker tag postgrest stevechavez/postgrest:latest
-            docker push stevechavez/postgrest:$VERSION
             docker push stevechavez/postgrest:latest
 
 workflows:
   version: 2
   build-test-release:
     jobs:
-      - release-docker
       - build-test:
           filters:
             tags:

@@ -13,8 +13,8 @@ RUN BUILD_DEPS="curl ca-certificates xz-utils" && \
     apt-get -qq update && \
     apt-get -qq install -y --no-install-recommends $BUILD_DEPS && \
     cd /tmp && \
-    curl -SLO https://github.com/steve-chavez/postgrest/releases/download/v${POSTGREST_VERSION}/postgrest-v${POSTGREST_VERSION}-ubuntu.tar.xz && \
-    tar -xJvf postgrest-v${POSTGREST_VERSION}-ubuntu.tar.xz && \
+    curl -SLO https://github.com/steve-chavez/postgrest/releases/download/${POSTGREST_VERSION}/postgrest-${POSTGREST_VERSION}-ubuntu.tar.xz && \
+    tar -xJvf postgrest-${POSTGREST_VERSION}-ubuntu.tar.xz && \
     mv postgrest /usr/local/bin/postgrest && \
     cd / && \
     apt-get -qq purge --auto-remove -y $BUILD_DEPS && \
