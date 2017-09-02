@@ -127,10 +127,28 @@ jobs:
             BODY=$(sed -n "1,/$START/d;/$END/q;p" CHANGELOG.md)
             ghr -t $GITHUB_TOKEN -u $CIRCLE_PROJECT_USERNAME -r $CIRCLE_PROJECT_REPONAME -b "$BODY" --replace v0.4.3.0 /tmp/workspace/bin
 
+  release-docker:
+    docker:
+      - image: circleci/golang:1.8
+    steps:
+      - checkout
+      - setup_remote_docker
+      - run:
+          name: publish docker image
+          command: |
+            VERSION=$(echo v0.4.3.0 | cut -c2-)
+            docker build --build-arg POSTGREST_VERSION=$VERSION -t postgrest ./docker/
+            docker login -u $DOCKER_USER -p $DOCKER_PASS
+            docker tag postgrest stevechavez/postgrest:$VERSION
+            docker tag postgrest stevechavez/postgrest:latest
+            docker push stevechavez/postgrest:$VERSION
+            docker push stevechavez/postgrest:latest
+
 workflows:
   version: 2
   build-test-release:
     jobs:
+      - release-docker
       - build-test:
           filters:
             tags:
