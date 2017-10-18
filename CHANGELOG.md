@@ -24,6 +24,7 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 - #974, Fix RPC error when function has single OUT param - @steve-chavez
 - #1021, Reduce join size in allColumns for faster program start - @nextstopsun
 - #411, Remove the need for pk in &select for parent embed - @steve-chavez
+- #925, Fix RPC high memory usage by using parametrized query - @steve-chavez
 
 ## [0.4.3.0] - 2017-09-06
 
