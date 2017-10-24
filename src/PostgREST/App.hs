@@ -244,9 +244,8 @@ app dbStructure conf apiRequest =
                           Nothing -> M.fromList $ second toJSON <$> params
                   singular = contentType == CTSingularJSON
                   paramsAsSingleObject = iPreferSingleObjectParameter apiRequest
-                  specifiedPgArgs = filter (flip M.member prms . pgaName) $ fromMaybe [] (pdArgs <$> proc)
-              row <- H.query (toJSON prms) $
-                callProc qi specifiedPgArgs returnsScalar q cq shouldCount
+              row <- H.query ["1", "smth", "true"] $
+                callProc qi ["num"] returnsScalar q cq shouldCount
                          singular paramsAsSingleObject
                          (contentType == CTTextCSV)
                          (contentType == CTOctetStream) _isReadOnly bField

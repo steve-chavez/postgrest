@@ -33,6 +33,7 @@ import qualified Data.Aeson              as JSON
 
 import           PostgREST.Config        (pgVersion96)
 import           PostgREST.RangeQuery    (NonnegRange, rangeLimit, rangeOffset, allRange)
+import           Contravariant.Extras    (contramany)
 import           Data.Functor.Contravariant (contramap)
 import qualified Data.HashMap.Strict     as HM
 import           Data.Maybe
@@ -85,6 +86,10 @@ decodeStandardMay =
 encodeUniformObjs :: HE.Params PayloadJSON
 encodeUniformObjs =
   contramap (JSON.Array . V.map JSON.Object . unPayloadJSON) (HE.value HE.json)
+
+twmp :: HE.Params [ByteString]
+twmp =
+  contramany (HE.value HE.unknown)
 
 createReadStatement :: SqlQuery -> SqlQuery -> Bool -> Bool -> Bool -> Maybe FieldName ->
                        H.Query () ResultsWithCount
@@ -144,19 +149,16 @@ createWriteStatement selectQuery mutateQuery wantSingle wantHdrs asCsv rep pKeys
     | otherwise = asJsonF
 
 type ProcResults = (Maybe Int64, Int64, ByteString, ByteString)
-callProc :: QualifiedIdentifier -> [PgArg] -> Bool -> SqlQuery -> SqlQuery -> Bool ->
+callProc :: QualifiedIdentifier -> [Text] -> Bool -> SqlQuery -> SqlQuery -> Bool ->
             Bool -> Bool -> Bool -> Bool -> Bool -> Maybe FieldName -> PgVersion ->
-            H.Query JSON.Value (Maybe ProcResults)
+            H.Query [ByteString] (Maybe ProcResults)
 callProc qi pgArgs returnsScalar selectQuery countQuery countTotal isSingle paramsAsJson asCsv asBinary isReadOnly binaryField pgVer =
-  unicodeStatement sql (HE.value HE.json) decodeProc True
+  unicodeStatement sql twmp decodeProc False
   where
     sql =
      if returnsScalar then [qc|
-       WITH _args_record AS (
-         {argsRecord}
-       ),
-       {sourceCTEName} AS (
-         SELECT {fromQi qi}({args})
+       WITH {sourceCTEName} AS (
+         SELECT {fromQi qi}(num := $1, str := $2, b := $3)
        )
        SELECT
          {countResultF} AS total_result_set,
@@ -165,11 +167,8 @@ callProc qi pgArgs returnsScalar selectQuery countQuery countTotal isSingle para
          {responseHeaders} AS response_headers
        FROM ({selectQuery}) _postgrest_t;|]
      else [qc|
-       WITH _args_record AS (
-         {argsRecord}
-       ),
-       {sourceCTEName} AS (
-         SELECT * FROM {fromQi qi}({args})
+       WITH {sourceCTEName} AS (
+         SELECT * FROM {fromQi qi}(num := $1, str := $2, b := $3)
        )
        SELECT
          {countResultF} AS total_result_set,
@@ -178,12 +177,6 @@ callProc qi pgArgs returnsScalar selectQuery countQuery countTotal isSingle para
          {responseHeaders} AS response_headers
        FROM ({selectQuery}) _postgrest_t;|]
 
-    (argsRecord, args) | paramsAsJson && not isReadOnly  = ("SELECT NULL", "$1")
-                       | null pgArgs = ("SELECT NULL", "")
-                       | otherwise = (
-                           "SELECT * FROM json_to_record($1) AS _(" <> intercalate ", " ((\a -> pgaName a <> " " <> pgaType a) <$> pgArgs) <> ")",
-                           intercalate ", " ((\a -> pgaName a <> " := (SELECT " <> pgaName a <> " FROM _args_record)") <$> pgArgs)
-                         )
     countResultF = if countTotal then "( "<> countQuery <> ")" else "null::bigint" :: Text
     _procName = qiName qi
     responseHeaders =

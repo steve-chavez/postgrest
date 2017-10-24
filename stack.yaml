@@ -7,6 +7,6 @@ extra-deps:
   - Ranged-sets-0.3.0
   - protolude-0.2
 ghc-options:
-  postgrest: -O2 -Werror -Wall -fwarn-identities -fno-warn-redundant-constraints
+  postgrest: -O2 -Wall -fwarn-identities -fno-warn-redundant-constraints
 nix:
   packages: [postgresql, zlib]
