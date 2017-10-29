@@ -65,6 +65,7 @@ library
                      , heredoc
                      , HTTP
                      , http-types
+                     , ilist
                      , insert-ordered-containers
                      , interpolatedstring-perl6
                      , jose >= 0.6

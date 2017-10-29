@@ -6,10 +6,11 @@ module PostgREST.App (
 ) where
 
 import           Control.Applicative
-import           Data.Aeson                (toJSON, eitherDecode)
+import           Data.Aeson                (Value(..), toJSON, eitherDecode, decode)
 import qualified Data.ByteString.Char8     as BS
 import           Data.Maybe
 import           Data.IORef                (IORef, readIORef)
+import           Data.List.Index           (indexed)
 import           Data.Text                 (intercalate)
 
 import qualified Hasql.Pool                 as P
@@ -54,6 +55,7 @@ import           PostgREST.QueryBuilder ( callProc
                                         , createReadStatement
                                         , createWriteStatement
                                         , ResultsWithCount
+                                        , unquoted
                                         )
 import           PostgREST.Types
 import           PostgREST.OpenAPI
@@ -244,8 +246,8 @@ app dbStructure conf apiRequest =
                           Nothing -> M.fromList $ second toJSON <$> params
                   singular = contentType == CTSingularJSON
                   paramsAsSingleObject = iPreferSingleObjectParameter apiRequest
-              row <- H.query ["1", "smth", "true"] $
-                callProc qi ["num"] returnsScalar q cq shouldCount
+              row <- H.query (toS . unquoted <$> M.elems prms) $
+                callProc qi (indexed $ M.keys prms) returnsScalar q cq shouldCount
                          singular paramsAsSingleObject
                          (contentType == CTTextCSV)
                          (contentType == CTOctetStream) _isReadOnly bField

@@ -87,10 +87,6 @@ encodeUniformObjs :: HE.Params PayloadJSON
 encodeUniformObjs =
   contramap (JSON.Array . V.map JSON.Object . unPayloadJSON) (HE.value HE.json)
 
-twmp :: HE.Params [ByteString]
-twmp =
-  contramany (HE.value HE.unknown)
-
 createReadStatement :: SqlQuery -> SqlQuery -> Bool -> Bool -> Bool -> Maybe FieldName ->
                        H.Query () ResultsWithCount
 createReadStatement selectQuery countQuery isSingle countTotal asCsv binaryField =
@@ -149,16 +145,17 @@ createWriteStatement selectQuery mutateQuery wantSingle wantHdrs asCsv rep pKeys
     | otherwise = asJsonF
 
 type ProcResults = (Maybe Int64, Int64, ByteString, ByteString)
-callProc :: QualifiedIdentifier -> [Text] -> Bool -> SqlQuery -> SqlQuery -> Bool ->
+callProc :: QualifiedIdentifier -> [(Int, Text)] -> Bool -> SqlQuery -> SqlQuery -> Bool ->
             Bool -> Bool -> Bool -> Bool -> Bool -> Maybe FieldName -> PgVersion ->
             H.Query [ByteString] (Maybe ProcResults)
-callProc qi pgArgs returnsScalar selectQuery countQuery countTotal isSingle paramsAsJson asCsv asBinary isReadOnly binaryField pgVer =
-  unicodeStatement sql twmp decodeProc False
+callProc qi args returnsScalar selectQuery countQuery countTotal isSingle paramsAsJson asCsv asBinary isReadOnly binaryField pgVer =
+  unicodeStatement sql (contramany (HE.value HE.unknown)) decodeProc False
   where
+    preparedArgs = intercalate ", " ((\a -> snd a <> ":= " <> ("$" <> show (fst a + 1))) <$> args)
     sql =
      if returnsScalar then [qc|
        WITH {sourceCTEName} AS (
-         SELECT {fromQi qi}(num := $1, str := $2, b := $3)
+         SELECT {fromQi qi}({preparedArgs})
        )
        SELECT
          {countResultF} AS total_result_set,
@@ -168,7 +165,7 @@ callProc qi pgArgs returnsScalar selectQuery countQuery countTotal isSingle para
        FROM ({selectQuery}) _postgrest_t;|]
      else [qc|
        WITH {sourceCTEName} AS (
-         SELECT * FROM {fromQi qi}(num := $1, str := $2, b := $3)
+         SELECT * FROM {fromQi qi}({preparedArgs})
        )
        SELECT
          {countResultF} AS total_result_set,
