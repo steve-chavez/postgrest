@@ -164,9 +164,10 @@ userApiRequest schema req reqBody
         note "All lines must have same number of fields" . ensureUniform . csvToJson
           =<< CSV.decodeByName reqBody
       CTOther "application/x-www-form-urlencoded" ->
-        Right . PayloadJSON . V.singleton . M.fromList
-                    . map (toS *** JSON.String . toS) . parseSimpleQuery
-                    $ toS reqBody
+        let temp = M.fromList . map (toS *** JSON.String . toS) . parseSimpleQuery
+                   $ toS reqBody
+            keys = M.keys temp in
+        Right $ PayloadJSON (S.fromList keys, V.singleton (JSON.Object temp))
       ct ->
         Left $ toS $ "Content-Type not acceptable: " <> toMime ct
   topLevelRange = fromMaybe allRange $ M.lookup "limit" ranges
@@ -309,5 +310,5 @@ ensureUniform arr =
       areKeysUniform = all (==canonicalKeys) keysPerObj in
 
   if (V.length objs == V.length arr) && areKeysUniform
-    then Just (PayloadJSON objs)
+    then Just $ PayloadJSON (canonicalKeys, arr)
     else Nothing

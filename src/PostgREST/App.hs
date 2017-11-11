@@ -6,7 +6,7 @@ module PostgREST.App (
 ) where
 
 import           Control.Applicative
-import           Data.Aeson                (toJSON, eitherDecode)
+import           Data.Aeson                (toJSON, eitherDecode, encode)
 import qualified Data.ByteString.Char8     as BS
 import           Data.Maybe
 import           Data.IORef                (IORef, readIORef)
@@ -136,7 +136,7 @@ app dbStructure conf apiRequest =
                       )
                     ] (toS body)
 
-        (ActionCreate, TargetIdent (QualifiedIdentifier _ table), Just payload@(PayloadJSON rows)) ->
+        (ActionCreate, TargetIdent (QualifiedIdentifier _ table), Just (PayloadJSON (_, rows))) ->
           case mutateSqlParts of
             Left errorResponse -> return errorResponse
             Right (sq, mq) -> do
@@ -151,7 +151,7 @@ app dbStructure conf apiRequest =
                         (contentType == CTSingularJSON) isSingle
                         (contentType == CTTextCSV) (iPreferRepresentation apiRequest)
                         pKeys
-                  row <- H.query payload stm
+                  row <- H.query (toS $ encode rows) stm
                   let (_, _, fs, body) = extractQueryResult row
                       headers = catMaybes [
                           if null fs
@@ -168,16 +168,16 @@ app dbStructure conf apiRequest =
                     if iPreferRepresentation apiRequest == Full
                       then toS body else ""
 
-        (ActionUpdate, TargetIdent _, Just payload@(PayloadJSON rows)) ->
-          case (mutateSqlParts, null <$> rows V.!? 0, iPreferRepresentation apiRequest == Full) of
+        (ActionUpdate, TargetIdent _, Just (PayloadJSON (_, rows))) ->
+          case (mutateSqlParts, isNothing $ rows V.!? 0, iPreferRepresentation apiRequest == Full) of
             (Left errorResponse, _, _) -> return errorResponse
-            (_, Just True, True) -> return $ responseLBS status200 [contentRangeH 1 0 Nothing] "[]"
-            (_, Just True, False) -> return $ responseLBS status204 [contentRangeH 1 0 Nothing] ""
+            (_, True, True) -> return $ responseLBS status200 [contentRangeH 1 0 Nothing] "[]"
+            (_, True, False) -> return $ responseLBS status204 [contentRangeH 1 0 Nothing] ""
             (Right (sq, mq), _, _) -> do
               let stm = createWriteStatement sq mq
                     (contentType == CTSingularJSON) False (contentType == CTTextCSV)
                     (iPreferRepresentation apiRequest) []
-              row <- H.query payload stm
+              row <- H.query (toS $ encode rows) stm
               let (_, queryTotal, _, body) = extractQueryResult row
               if contentType == CTSingularJSON
                  && queryTotal /= 1
@@ -199,12 +199,11 @@ app dbStructure conf apiRequest =
           case mutateSqlParts of
             Left errorResponse -> return errorResponse
             Right (sq, mq) -> do
-              let emptyPayload = PayloadJSON V.empty
-                  stm = createWriteStatement sq mq
+              let stm = createWriteStatement sq mq
                     (contentType == CTSingularJSON) False
                     (contentType == CTTextCSV)
                     (iPreferRepresentation apiRequest) []
-              row <- H.query emptyPayload stm
+              row <- H.query mempty stm
               let (_, queryTotal, _, body) = extractQueryResult row
                   r = contentRangeH 1 0 $
                         toInteger <$> if shouldCount then Just queryTotal else Nothing
@@ -227,7 +226,7 @@ app dbStructure conf apiRequest =
               let acceptH = (hAllow, if tableInsertable table then "GET,POST,PATCH,DELETE" else "GET") in
               return $ responseLBS status200 [allOrigins, acceptH] ""
 
-        (ActionInvoke _isReadOnly, TargetProc qi, payload) ->
+        (ActionInvoke _isReadOnly, TargetProc qi, _) ->
           let proc = M.lookup (qiName qi) allProcs
               returnsScalar = case proc of
                 Just ProcDescription{pdReturnType = (Single (Scalar _))} -> True
@@ -239,12 +238,10 @@ app dbStructure conf apiRequest =
           case parts of
             Left errorResponse -> return errorResponse
             Right ((q, cq), bField, params) -> do
-              let prms = case payload of
-                          Just (PayloadJSON pld) -> V.head pld
-                          Nothing -> M.fromList $ second toJSON <$> params
+              let prms =  M.fromList $ second toJSON <$> params
                   singular = contentType == CTSingularJSON
                   paramsAsSingleObject = iPreferSingleObjectParameter apiRequest
-                  specifiedPgArgs = filter (flip M.member prms . pgaName) $ fromMaybe [] (pdArgs <$> proc)
+                  specifiedPgArgs = fromMaybe [] (pdArgs <$> proc)
               row <- H.query (toJSON prms) $
                 callProc qi specifiedPgArgs returnsScalar q cq shouldCount
                          singular paramsAsSingleObject

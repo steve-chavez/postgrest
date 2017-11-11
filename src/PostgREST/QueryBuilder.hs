@@ -33,9 +33,9 @@ import qualified Data.Aeson              as JSON
 
 import           PostgREST.Config        (pgVersion96)
 import           PostgREST.RangeQuery    (NonnegRange, rangeLimit, rangeOffset, allRange)
-import           Data.Functor.Contravariant (contramap)
 import qualified Data.HashMap.Strict     as HM
 import           Data.Maybe
+import qualified Data.Set                as S
 import           Data.Text               (intercalate, unwords, replace, isInfixOf, toLower)
 import qualified Data.Text as T          (map, takeWhile, null)
 import qualified Data.Text.Encoding as T
@@ -78,14 +78,6 @@ decodeStandardMay :: HD.Result (Maybe ResultsWithCount)
 decodeStandardMay =
   HD.maybeRow standardRow
 
-{-| JSON and CSV payloads from the client are given to us as
-    PayloadJSON (objects who all have the same keys),
-    and we turn this into an old fasioned JSON array
--}
-encodeUniformObjs :: HE.Params PayloadJSON
-encodeUniformObjs =
-  contramap (JSON.Array . V.map JSON.Object . unPayloadJSON) (HE.value HE.json)
-
 createReadStatement :: SqlQuery -> SqlQuery -> Bool -> Bool -> Bool -> Maybe FieldName ->
                        H.Query () ResultsWithCount
 createReadStatement selectQuery countQuery isSingle countTotal asCsv binaryField =
@@ -107,11 +99,12 @@ createReadStatement selectQuery countQuery isSingle countTotal asCsv binaryField
     | isJust binaryField = asBinaryF $ fromJust binaryField
     | otherwise = asJsonF
 
+
 createWriteStatement :: SqlQuery -> SqlQuery -> Bool -> Bool -> Bool ->
                         PreferRepresentation -> [Text] ->
-                        H.Query PayloadJSON (Maybe ResultsWithCount)
+                        H.Query ByteString (Maybe ResultsWithCount)
 createWriteStatement selectQuery mutateQuery wantSingle wantHdrs asCsv rep pKeys =
-  unicodeStatement sql encodeUniformObjs decodeStandardMay True
+  unicodeStatement sql (HE.value HE.unknown) decodeStandardMay True
 
  where
   sql = case rep of
@@ -289,10 +282,10 @@ requestToQuery schema isParent (DbRead (Node (Select colSelects tbls logicForest
     --getQueryParts is not total but requestToQuery is called only after addJoinConditions which ensures the only
     --posible relations are Child Parent Many
     getQueryParts _ _ = undefined
-requestToQuery schema _ (DbMutate (Insert mainTbl (PayloadJSON rows) returnings)) =
+requestToQuery schema _ (DbMutate (Insert mainTbl (PayloadJSON (keys, rows)) returnings)) =
   insInto <> vals <> ret
   where qi = QualifiedIdentifier schema mainTbl
-        cols = map pgFmtIdent $ fromMaybe [] (HM.keys <$> (rows V.!? 0))
+        cols = map pgFmtIdent $ S.toList keys
         colsString = intercalate ", " cols
         insInto = unwords [ "INSERT INTO" , fromQi qi,
             if T.null colsString then "" else "(" <> colsString <> ")"
@@ -304,17 +297,14 @@ requestToQuery schema _ (DbMutate (Insert mainTbl (PayloadJSON rows) returnings)
         ret = if null returnings
                   then ""
                   else unwords [" RETURNING ", intercalate ", " (map (pgFmtColumn qi) returnings)]
-requestToQuery schema _ (DbMutate (Update mainTbl (PayloadJSON rows) logicForest returnings)) =
-  case rows V.!? 0 of
-    Just obj ->
-      let cols = intercalate ", " (pgFmtIdent <> const " = _." <> pgFmtIdent <$> HM.keys obj) in
-      unwords [
-        "UPDATE ", fromQi qi,
-        " SET " <> cols <> " FROM (SELECT * FROM json_populate_recordset(null::" <> fromQi qi <> ", $1)) _ ",
-        ("WHERE " <> intercalate " AND " (map (pgFmtLogicTree qi) logicForest)) `emptyOnFalse` null logicForest,
-        ("RETURNING " <> intercalate ", " (map (pgFmtColumn qi) returnings)) `emptyOnFalse` null returnings
-        ]
-    Nothing -> undefined
+requestToQuery schema _ (DbMutate (Update mainTbl (PayloadJSON (keys, _)) logicForest returnings)) =
+  let cols = intercalate ", " (pgFmtIdent <> const " = _." <> pgFmtIdent <$> S.toList keys) in
+  unwords [
+    "UPDATE ", fromQi qi,
+    " SET " <> cols <> " FROM (SELECT * FROM json_populate_recordset(null::" <> fromQi qi <> ", $1)) _ ",
+    ("WHERE " <> intercalate " AND " (map (pgFmtLogicTree qi) logicForest)) `emptyOnFalse` null logicForest,
+    ("RETURNING " <> intercalate ", " (map (pgFmtColumn qi) returnings)) `emptyOnFalse` null returnings
+    ]
   where
     qi = QualifiedIdentifier schema mainTbl
 requestToQuery schema _ (DbMutate (Delete mainTbl logicForest returnings)) =

@@ -2,12 +2,12 @@
 module PostgREST.Types where
 import           Protolude
 import qualified GHC.Show
-import           Data.Aeson
+import qualified Data.Aeson           as JSON
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.CaseInsensitive as CI
 import qualified Data.HashMap.Strict  as M
+import qualified Data.Set                  as S
 import           Data.Tree
-import qualified Data.Vector          as V
 import           PostgREST.RangeQuery (NonnegRange)
 import           Network.HTTP.Types.Header (hContentType, Header)
 
@@ -135,11 +135,7 @@ data Relation = Relation {
 
 -- | An array of JSON objects that has been verified to have
 -- the same keys in every object
-newtype PayloadJSON = PayloadJSON (V.Vector Object)
-  deriving (Show, Eq)
-
-unPayloadJSON :: PayloadJSON -> V.Vector Object
-unPayloadJSON (PayloadJSON objs) = objs
+newtype PayloadJSON = PayloadJSON (S.Set Text, JSON.Array) deriving (Show, Eq)
 
 data Proxy = Proxy {
   proxyScheme     :: Text
@@ -224,10 +220,10 @@ type RpcQParam = (Text, Text)
 -}
 newtype GucHeader = GucHeader (Text, Text)
 
-instance FromJSON GucHeader where
-  parseJSON (Object o) = case headMay (M.toList o) of
-    Just (k, String s) | M.size o == 1 -> pure $ GucHeader (k, s)
-                       | otherwise     -> mzero
+instance JSON.FromJSON GucHeader where
+  parseJSON (JSON.Object o) = case headMay (M.toList o) of
+    Just (k, JSON.String s) | M.size o == 1 -> pure $ GucHeader (k, s)
+                            | otherwise     -> mzero
     _ -> mzero
   parseJSON _          = mzero
 
