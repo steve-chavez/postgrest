@@ -40,7 +40,6 @@ import           Data.Text               (intercalate, unwords, replace, isInfix
 import qualified Data.Text as T          (map, takeWhile, null)
 import qualified Data.Text.Encoding as T
 import           Data.Tree               (Tree(..))
-import qualified Data.Vector as V
 import           PostgREST.Types
 import           Text.InterpolatedString.Perl6 (qc)
 import qualified Data.ByteString.Char8   as BS
@@ -282,7 +281,7 @@ requestToQuery schema isParent (DbRead (Node (Select colSelects tbls logicForest
     --getQueryParts is not total but requestToQuery is called only after addJoinConditions which ensures the only
     --posible relations are Child Parent Many
     getQueryParts _ _ = undefined
-requestToQuery schema _ (DbMutate (Insert mainTbl (PayloadJSON (keys, rows)) returnings)) =
+requestToQuery schema _ (DbMutate (Insert mainTbl (PayloadJSON (keys, _, rows)) returnings)) =
   insInto <> vals <> ret
   where qi = QualifiedIdentifier schema mainTbl
         cols = map pgFmtIdent $ S.toList keys
@@ -292,12 +291,12 @@ requestToQuery schema _ (DbMutate (Insert mainTbl (PayloadJSON (keys, rows)) ret
           ]
         vals = unwords $
           if T.null colsString
-            then if V.null rows then ["SELECT null WHERE false"] else ["DEFAULT VALUES"]
+            then if rows == 0 then ["SELECT null WHERE false"] else ["DEFAULT VALUES"]
             else ["SELECT", colsString, "FROM json_populate_recordset(null::" , fromQi qi, ", $1)"]
         ret = if null returnings
                   then ""
                   else unwords [" RETURNING ", intercalate ", " (map (pgFmtColumn qi) returnings)]
-requestToQuery schema _ (DbMutate (Update mainTbl (PayloadJSON (keys, _)) logicForest returnings)) =
+requestToQuery schema _ (DbMutate (Update mainTbl (PayloadJSON (keys, _, _)) logicForest returnings)) =
   let cols = intercalate ", " (pgFmtIdent <> const " = _." <> pgFmtIdent <$> S.toList keys) in
   unwords [
     "UPDATE ", fromQi qi,

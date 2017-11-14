@@ -156,18 +156,21 @@ userApiRequest schema req reqBody
   payload =
     case decodeContentType . fromMaybe "application/json" $ lookupHeader "content-type" of
       CTApplicationJSON ->
-        note "All object keys must match" . ensureUniform . pluralize
+        let p = reqBody in
+        note "All object keys must match" . ensureUniform p . pluralize
           =<< if BL.null reqBody && isTargetingProc
                then Right emptyObject
-               else JSON.eitherDecode reqBody
+               else JSON.eitherDecode p
       CTTextCSV ->
-        note "All lines must have same number of fields" . ensureUniform . csvToJson
-          =<< CSV.decodeByName reqBody
+        let p = reqBody in
+        note "All lines must have same number of fields" . ensureUniform p . csvToJson
+          =<< CSV.decodeByName p
       CTOther "application/x-www-form-urlencoded" ->
-        let temp = M.fromList . map (toS *** JSON.String . toS) . parseSimpleQuery
-                   $ toS reqBody
+        let p    = reqBody
+            temp = M.fromList . map (toS *** JSON.String . toS) . parseSimpleQuery
+                   $ toS p
             keys = M.keys temp in
-        Right $ PayloadJSON (S.fromList keys, V.singleton (JSON.Object temp))
+        Right $ PayloadJSON (S.fromList keys, p, 1)
       ct ->
         Left $ toS $ "Content-Type not acceptable: " <> toMime ct
   topLevelRange = fromMaybe allRange $ M.lookup "limit" ranges
@@ -297,8 +300,8 @@ pluralize _                   = V.empty
 
 -- | Test that Array contains only Objects having the same keys
 -- and if so mark it as PayloadJSON
-ensureUniform :: JSON.Array -> Maybe PayloadJSON
-ensureUniform arr =
+ensureUniform :: BL.ByteString -> JSON.Array -> Maybe PayloadJSON
+ensureUniform p arr =
   let objs :: V.Vector JSON.Object
       objs = foldr -- filter non-objects, map to raw objects
                (\val result -> case val of
@@ -310,5 +313,5 @@ ensureUniform arr =
       areKeysUniform = all (==canonicalKeys) keysPerObj in
 
   if (V.length objs == V.length arr) && areKeysUniform
-    then Just $ PayloadJSON (canonicalKeys, arr)
+    then Just $ PayloadJSON (canonicalKeys, p, V.length arr)
     else Nothing

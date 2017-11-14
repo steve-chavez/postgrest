@@ -6,7 +6,7 @@ module PostgREST.App (
 ) where
 
 import           Control.Applicative
-import           Data.Aeson                (toJSON, eitherDecode, encode)
+import           Data.Aeson                (toJSON, eitherDecode)
 import qualified Data.ByteString.Char8     as BS
 import           Data.Maybe
 import           Data.IORef                (IORef, readIORef)
@@ -22,7 +22,6 @@ import           Network.HTTP.Types.URI    (renderSimpleQuery)
 import           Network.Wai
 import           Network.Wai.Middleware.RequestLogger (logStdout)
 
-import qualified Data.Vector               as V
 import qualified Hasql.Transaction         as H
 
 import qualified Data.HashMap.Strict       as M
@@ -136,22 +135,22 @@ app dbStructure conf apiRequest =
                       )
                     ] (toS body)
 
-        (ActionCreate, TargetIdent (QualifiedIdentifier _ table), Just (PayloadJSON (_, rows))) ->
+        (ActionCreate, TargetIdent (QualifiedIdentifier _ table), Just (PayloadJSON (_, bs, rows))) ->
           case mutateSqlParts of
             Left errorResponse -> return errorResponse
             Right (sq, mq) -> do
-              let isSingle = (==1) $ V.length rows
+              let isSingle = rows == 1
               if contentType == CTSingularJSON
                  && not isSingle
                  && iPreferRepresentation apiRequest == Full
-                then return $ singularityError (toInteger $ V.length rows)
+                then return $ singularityError (toInteger rows)
                 else do
                   let pKeys = map pkName $ filter (filterPk schema table) allPrKeys -- would it be ok to move primary key detection in the query itself?
                       stm = createWriteStatement sq mq
                         (contentType == CTSingularJSON) isSingle
                         (contentType == CTTextCSV) (iPreferRepresentation apiRequest)
                         pKeys
-                  row <- H.query (toS $ encode rows) stm
+                  row <- H.query (toS bs) stm
                   let (_, _, fs, body) = extractQueryResult row
                       headers = catMaybes [
                           if null fs
@@ -161,15 +160,15 @@ app dbStructure conf apiRequest =
                             then Just $ toHeader contentType
                             else Nothing
                         , Just . contentRangeH 1 0 $
-                            toInteger <$> if shouldCount then Just (V.length rows) else Nothing
+                            toInteger <$> if shouldCount then Just rows else Nothing
                         ]
 
                   return . responseLBS status201 headers $
                     if iPreferRepresentation apiRequest == Full
                       then toS body else ""
 
-        (ActionUpdate, TargetIdent _, Just (PayloadJSON (_, rows))) ->
-          case (mutateSqlParts, isNothing $ rows V.!? 0, iPreferRepresentation apiRequest == Full) of
+        (ActionUpdate, TargetIdent _, Just (PayloadJSON (_, bs, rows))) ->
+          case (mutateSqlParts, rows == 0, iPreferRepresentation apiRequest == Full) of
             (Left errorResponse, _, _) -> return errorResponse
             (_, True, True) -> return $ responseLBS status200 [contentRangeH 1 0 Nothing] "[]"
             (_, True, False) -> return $ responseLBS status204 [contentRangeH 1 0 Nothing] ""
@@ -177,7 +176,7 @@ app dbStructure conf apiRequest =
               let stm = createWriteStatement sq mq
                     (contentType == CTSingularJSON) False (contentType == CTTextCSV)
                     (iPreferRepresentation apiRequest) []
-              row <- H.query (toS $ encode rows) stm
+              row <- H.query (toS bs) stm
               let (_, queryTotal, _, body) = extractQueryResult row
               if contentType == CTSingularJSON
                  && queryTotal /= 1
