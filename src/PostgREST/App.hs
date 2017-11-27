@@ -6,8 +6,9 @@ module PostgREST.App (
 ) where
 
 import           Control.Applicative
-import           Data.Aeson                (toJSON, eitherDecode)
+import           Data.Aeson                as JSON
 import qualified Data.ByteString.Char8     as BS
+import           Data.List.Index           (indexed)
 import           Data.Maybe
 import           Data.IORef                (IORef, readIORef)
 import           Data.Text                 (intercalate)
@@ -25,7 +26,8 @@ import           Network.Wai.Middleware.RequestLogger (logStdout)
 import qualified Data.Vector               as V
 import qualified Hasql.Transaction         as H
 
-import qualified Data.HashMap.Strict       as M
+import qualified Data.HashMap.Strict       as HM
+import qualified Data.Map.Strict           as M
 
 import           PostgREST.ApiRequest   ( ApiRequest(..), ContentType(..)
                                         , Action(..), Target(..)
@@ -54,6 +56,7 @@ import           PostgREST.QueryBuilder ( callProc
                                         , createReadStatement
                                         , createWriteStatement
                                         , ResultsWithCount
+                                        , unquoted
                                         )
 import           PostgREST.Types
 import           PostgREST.OpenAPI
@@ -96,7 +99,7 @@ transactionMode structure target action =
     ActionInvoke{isReadOnly=False} ->
       let proc =
             case target of
-              (TargetProc qi) -> M.lookup (qiName qi) $
+              (TargetProc qi) -> HM.lookup (qiName qi) $
                                    dbProcs structure
               _               -> Nothing
           v = fromMaybe Volatile $ pdVolatility <$> proc in
@@ -228,7 +231,7 @@ app dbStructure conf apiRequest =
               return $ responseLBS status200 [allOrigins, acceptH] ""
 
         (ActionInvoke _isReadOnly, TargetProc qi, payload) ->
-          let proc = M.lookup (qiName qi) allProcs
+          let proc = HM.lookup (qiName qi) allProcs
               returnsScalar = case proc of
                 Just ProcDescription{pdReturnType = (Single (Scalar _))} -> True
                 _ -> False
@@ -240,20 +243,22 @@ app dbStructure conf apiRequest =
             Left errorResponse -> return errorResponse
             Right ((q, cq), bField, params) -> do
               let prms = case payload of
-                          Just (PayloadJSON pld) -> V.head pld
-                          Nothing -> M.fromList $ second toJSON <$> params -- toJSON is just for reusing the callProc function
+                          Just (PayloadJSON pld) -> M.fromList $ HM.toList $ V.head pld -- Data.Map is used to ensure that `elems` and `keys` come in the same order
+                          Nothing -> M.fromList $ second JSON.toJSON <$> params
                   singular = contentType == CTSingularJSON
-                  paramsAsSingleObject = iPreferSingleObjectParameter apiRequest
-              row <- H.query () $
-                callProc qi prms returnsScalar q cq shouldCount
-                         singular paramsAsSingleObject
-                         (contentType == CTTextCSV)
-                         (contentType == CTOctetStream) _isReadOnly bField
-                         (pgVersion dbStructure)
+                  paramsAsSingleObject = iPreferSingleObjectParameter apiRequest && not _isReadOnly
+                  prms' = toS . unquoted <$> if paramsAsSingleObject
+                         then [JSON.toJSON prms]
+                         else M.elems prms
+              row <- H.query prms' $
+                callProc qi (indexed $ M.keys prms) returnsScalar q cq shouldCount
+                         singular (contentType == CTTextCSV)
+                         (contentType == CTOctetStream) paramsAsSingleObject
+                         bField (pgVersion dbStructure)
               let (tableTotal, queryTotal, body, jsonHeaders) =
                     fromMaybe (Just 0, 0, "[]", "[]") row
                   (status, contentRange) = rangeHeader queryTotal tableTotal
-                  decodedHeaders = first toS $ eitherDecode $ toS jsonHeaders :: Either Text [GucHeader]
+                  decodedHeaders = first toS $ JSON.eitherDecode $ toS jsonHeaders :: Either Text [GucHeader]
               case decodedHeaders of
                 Left _ -> return gucHeadersError
                 Right hs ->
@@ -270,7 +275,7 @@ app dbStructure conf apiRequest =
               uri Nothing = ("http", host, port, "/")
               uri (Just Proxy { proxyScheme = s, proxyHost = h, proxyPort = p, proxyPath = b }) = (s, h, p, b)
               uri' = uri proxy
-              encodeApi ti sd procs = encodeOpenAPI (M.elems procs) (toTableInfo ti) uri' sd (dbPrimaryKeys dbStructure)
+              encodeApi ti sd procs = encodeOpenAPI (HM.elems procs) (toTableInfo ti) uri' sd (dbPrimaryKeys dbStructure)
           body <- encodeApi <$> H.query schema accessibleTables <*> H.query schema schemaDescription <*> H.query schema accessibleProcs
           return $ responseLBS status200 [toHeader CTOpenAPI] $ toS body
 
@@ -293,7 +298,7 @@ app dbStructure conf apiRequest =
       allOrigins = ("Access-Control-Allow-Origin", "*") :: Header
       shouldCount = iPreferCount apiRequest
       schema = toS $ configSchema conf
-      topLevelRange = fromMaybe allRange $ M.lookup "limit" $ iRange apiRequest
+      topLevelRange = fromMaybe allRange $ HM.lookup "limit" $ iRange apiRequest
       rangeHeader queryTotal tableTotal =
         let lower = rangeOffset topLevelRange
             upper = lower + toInteger queryTotal - 1

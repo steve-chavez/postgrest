@@ -57,13 +57,15 @@ library
                      , configurator-ng == 0.0.0.1
                      , containers
                      , contravariant
+                     , contravariant-extras
                      , either
                      , hasql
-                     , hasql-pool == 0.4.1
-                     , hasql-transaction == 0.5
+                     , hasql-pool
+                     , hasql-transaction
                      , heredoc
                      , HTTP
                      , http-types
+                     , ilist
                      , insert-ordered-containers
                      , interpolatedstring-perl6
                      , jose >= 0.6

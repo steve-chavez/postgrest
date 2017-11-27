@@ -1332,6 +1332,10 @@ $$ language sql;
 create or replace function test.set_cookie_twice() returns void as $$
   set local "response.headers" = '[{"Set-Cookie": "sessionid=38afes7a8; HttpOnly; Path=/"}, {"Set-Cookie": "id=a3fWa; Expires=Wed, 21 Oct 2015 07:28:00 GMT; Secure; HttpOnly"}]';
 $$ language sql;
---
--- PostgreSQL database dump complete
---
+
+create or replace function overloaded(a int, b int) returns int as $$
+select a + b
+$$ language sql;
+
+create or replace function overloaded(a text, b text, c text) returns text as $$
+select a || b || c $$ language sql;
