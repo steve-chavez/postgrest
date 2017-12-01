@@ -135,11 +135,12 @@ data Relation = Relation {
 
 -- | An array of JSON objects that has been verified to have
 -- the same keys in every object
-newtype PayloadJSON = PayloadJSON (V.Vector Object)
-  deriving (Show, Eq)
+data PayloadJSON = PayloadJSON (V.Vector Object) |
+                   SingleJSON (M.HashMap Text Text) deriving (Show, Eq)
 
 unPayloadJSON :: PayloadJSON -> V.Vector Object
 unPayloadJSON (PayloadJSON objs) = objs
+unPayloadJSON _ = undefined
 
 data Proxy = Proxy {
   proxyScheme     :: Text

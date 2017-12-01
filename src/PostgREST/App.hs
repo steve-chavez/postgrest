@@ -245,6 +245,7 @@ app dbStructure conf apiRequest =
               let prms = case payload of
                           Just (PayloadJSON pld) -> M.fromList $ HM.toList $ V.head pld -- Data.Map is used to ensure that `elems` and `keys` come in the same order
                           Nothing -> M.fromList $ second JSON.toJSON <$> params
+                          _ -> undefined
                   singular = contentType == CTSingularJSON
                   paramsAsSingleObject = iPreferSingleObjectParameter apiRequest && not _isReadOnly
                   prms' = toS . unquoted <$> if paramsAsSingleObject

@@ -313,6 +313,7 @@ requestToQuery schema _ (DbMutate (Delete mainTbl logicForest returnings)) =
       ("WHERE " <> intercalate " AND " (map (pgFmtLogicTree qi) logicForest)) `emptyOnFalse` null logicForest,
       ("RETURNING " <> intercalate ", " (map (pgFmtColumn qi) returnings)) `emptyOnFalse` null returnings
       ]
+requestToQuery _ _ _ = undefined
 
 sourceCTEName :: SqlFragment
 sourceCTEName = "pg_source"
