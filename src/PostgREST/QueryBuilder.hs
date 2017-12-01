@@ -138,9 +138,9 @@ createWriteStatement selectQuery mutateQuery wantSingle wantHdrs asCsv rep pKeys
 type ProcResults = (Maybe Int64, Int64, ByteString, ByteString)
 callProc :: QualifiedIdentifier -> [PgArg] -> Bool -> SqlQuery -> SqlQuery -> Bool ->
             Bool -> Bool -> Bool -> Bool -> Bool -> Maybe FieldName -> PgVersion ->
-            H.Query JSON.Value (Maybe ProcResults)
+            H.Query ByteString (Maybe ProcResults)
 callProc qi pgArgs returnsScalar selectQuery countQuery countTotal isSingle paramsAsJson asCsv asBinary isReadOnly binaryField pgVer =
-  unicodeStatement sql (HE.value HE.json) decodeProc True
+  unicodeStatement sql (HE.value HE.unknown) decodeProc True
   where
     sql =
      if returnsScalar then [qc|

@@ -6,7 +6,7 @@ module PostgREST.App (
 ) where
 
 import           Control.Applicative
-import           Data.Aeson                (toJSON, eitherDecode)
+import           Data.Aeson                (encode, toJSON, eitherDecode)
 import qualified Data.ByteString.Char8     as BS
 import           Data.Maybe
 import           Data.IORef                (IORef, readIORef)
@@ -225,7 +225,7 @@ app dbStructure conf apiRequest =
               let acceptH = (hAllow, if tableInsertable table then "GET,POST,PATCH,DELETE" else "GET") in
               return $ responseLBS status200 [allOrigins, acceptH] ""
 
-        (ActionInvoke _isReadOnly, TargetProc qi, _) ->
+        (ActionInvoke _isReadOnly, TargetProc qi, payload) ->
           let proc = M.lookup (qiName qi) allProcs
               returnsScalar = case proc of
                 Just ProcDescription{pdReturnType = (Single (Scalar _))} -> True
@@ -237,11 +237,13 @@ app dbStructure conf apiRequest =
           case parts of
             Left errorResponse -> return errorResponse
             Right ((q, cq), bField, params) -> do
-              let prms =  M.fromList $ second toJSON <$> params
+              let prms = case payload of
+                          Just (PayloadJSON (_, bs, _)) -> bs
+                          Nothing -> encode $ M.fromList $ second toJSON <$> params
                   singular = contentType == CTSingularJSON
                   paramsAsSingleObject = iPreferSingleObjectParameter apiRequest
                   specifiedPgArgs = fromMaybe [] (pdArgs <$> proc)
-              row <- H.query (toJSON prms) $
+              row <- H.query (toS prms) $
                 callProc qi specifiedPgArgs returnsScalar q cq shouldCount
                          singular paramsAsSingleObject
                          (contentType == CTTextCSV)
