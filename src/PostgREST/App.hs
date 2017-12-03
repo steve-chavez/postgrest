@@ -6,11 +6,12 @@ module PostgREST.App (
 ) where
 
 import           Control.Applicative
-import           Data.Aeson                (encode, toJSON, eitherDecode)
+import           Data.Aeson                (encode, eitherDecode, toJSON)
 import qualified Data.ByteString.Char8     as BS
 import           Data.Maybe
 import           Data.IORef                (IORef, readIORef)
 import           Data.Text                 (intercalate)
+import qualified Data.Set                  as S
 
 import qualified Hasql.Pool                 as P
 import qualified Hasql.Transaction          as HT
@@ -237,18 +238,21 @@ app dbStructure conf apiRequest =
           case parts of
             Left errorResponse -> return errorResponse
             Right ((q, cq), bField, params) -> do
-              let prms = case payload of
-                          Just (PayloadJSON (_, bs, _, _)) -> bs
-                          Nothing -> encode $ M.fromList $ second toJSON <$> params
+              let (prms, keys, isObject) = case payload of
+                          Just (PayloadJSON (ks, bs, _, isO)) -> (bs, ks, isO)
+                          Nothing -> do
+                            let temp = M.fromList $ second toJSON <$> params
+                                temp2 = S.fromList $ fst <$> params
+                            (encode temp, temp2, True)
                   singular = contentType == CTSingularJSON
                   paramsAsSingleObject = iPreferSingleObjectParameter apiRequest
-                  specifiedPgArgs = fromMaybe [] (pdArgs <$> proc)
+                  specifiedPgArgs = filter (flip S.member keys . pgaName) $ fromMaybe [] (pdArgs <$> proc)
               row <- H.query (toS prms) $
                 callProc qi specifiedPgArgs returnsScalar q cq shouldCount
                          singular paramsAsSingleObject
                          (contentType == CTTextCSV)
                          (contentType == CTOctetStream) _isReadOnly bField
-                         (pgVersion dbStructure)
+                         isObject (pgVersion dbStructure)
               let (tableTotal, queryTotal, body, jsonHeaders) =
                     fromMaybe (Just 0, 0, "[]", "[]") row
                   (status, contentRange) = rangeHeader queryTotal tableTotal

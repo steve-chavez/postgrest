@@ -137,9 +137,9 @@ createWriteStatement selectQuery mutateQuery wantSingle wantHdrs asCsv rep pKeys
 
 type ProcResults = (Maybe Int64, Int64, ByteString, ByteString)
 callProc :: QualifiedIdentifier -> [PgArg] -> Bool -> SqlQuery -> SqlQuery -> Bool ->
-            Bool -> Bool -> Bool -> Bool -> Bool -> Maybe FieldName -> PgVersion ->
+            Bool -> Bool -> Bool -> Bool -> Bool -> Maybe FieldName -> Bool -> PgVersion ->
             H.Query ByteString (Maybe ProcResults)
-callProc qi pgArgs returnsScalar selectQuery countQuery countTotal isSingle paramsAsJson asCsv asBinary isReadOnly binaryField pgVer =
+callProc qi pgArgs returnsScalar selectQuery countQuery countTotal isSingle paramsAsJson asCsv asBinary isReadOnly binaryField isObject pgVer =
   unicodeStatement sql (HE.value HE.unknown) decodeProc True
   where
     sql =
@@ -173,7 +173,11 @@ callProc qi pgArgs returnsScalar selectQuery countQuery countTotal isSingle para
     (argsRecord, args) | paramsAsJson && not isReadOnly  = ("SELECT NULL", "$1")
                        | null pgArgs = ("SELECT $1::text", "")
                        | otherwise = (
-                           "SELECT * FROM json_to_record($1) AS _(" <> intercalate ", " ((\a -> pgaName a <> " " <> pgaType a) <$> pgArgs) <> ")",
+                           "SELECT * FROM " <>
+                           (if isObject 
+                              then "json_to_record($1)"
+                              else "json_to_recordset($1)") <> 
+                           " AS _(" <> intercalate ", " ((\a -> pgaName a <> " " <> pgaType a) <$> pgArgs) <> ")",
                            intercalate ", " ((\a -> pgaName a <> " := (SELECT " <> pgaName a <> " FROM _args_record)") <$> pgArgs)
                          )
     countResultF = if countTotal then "( "<> countQuery <> ")" else "null::bigint" :: Text
