@@ -291,9 +291,9 @@ requestToQuery schema _ (DbMutate (Insert mainTbl (PayloadJSON (keys, _, rows, i
         cols = map pgFmtIdent $ S.toList keys
         colsString = intercalate ", " cols
         insInto = unwords [ 
-          (if T.null colsString
+          if T.null colsString
             then "WITH ignored_body AS (SELECT $1::text)"
-            else ""),
+            else "",
           "INSERT INTO" , fromQi qi,
             if T.null colsString then "" else "(" <> colsString <> ")"
           ]
@@ -302,9 +302,9 @@ requestToQuery schema _ (DbMutate (Insert mainTbl (PayloadJSON (keys, _, rows, i
             then if rows == 0 then ["SELECT null WHERE false"] else ["DEFAULT VALUES"]
             else [
               "SELECT", colsString, 
-              (if isObject 
+              if isObject 
                 then "FROM json_populate_record(null::" 
-                else "FROM json_populate_recordset(null::"),
+                else "FROM json_populate_recordset(null::",
               fromQi qi, ", $1)"]
         ret = if null returnings
                   then ""

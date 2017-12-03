@@ -316,16 +316,16 @@ ensureUniform p (isObject, arr, isEmpty) =
 
 ensureUniform2 :: JSON.Array -> Maybe PayloadJSON
 ensureUniform2 arr =
-  let objs :: V.Vector JSON.Object
-      objs = foldr -- filter non-objects, map to raw objects
+  let objs2 :: V.Vector JSON.Object
+      objs2 = foldr -- filter non-objects, map to raw objects
                (\val result -> case val of
                   JSON.Object o -> V.cons o result
                   _ -> result)
                V.empty arr
-      keysPerObj = V.map (S.fromList . M.keys) objs
+      keysPerObj = V.map (S.fromList . M.keys) objs2
       canonicalKeys = fromMaybe S.empty $ keysPerObj V.!? 0
       areKeysUniform = all (==canonicalKeys) keysPerObj in
 
-  if (V.length objs == V.length arr) && areKeysUniform
-    then Just $ PayloadJSON (canonicalKeys, JSON.encode objs, V.length arr, False, emptyArray == JSON.Array arr)
+  if (V.length objs2 == V.length arr) && areKeysUniform
+    then Just $ PayloadJSON (canonicalKeys, JSON.encode objs2, V.length arr, False, emptyArray == JSON.Array arr)
     else Nothing
