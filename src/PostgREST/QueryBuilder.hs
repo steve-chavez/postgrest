@@ -285,7 +285,7 @@ requestToQuery schema isParent (DbRead (Node (Select colSelects tbls logicForest
     --getQueryParts is not total but requestToQuery is called only after addJoinConditions which ensures the only
     --posible relations are Child Parent Many
     getQueryParts _ _ = undefined
-requestToQuery schema _ (DbMutate (Insert mainTbl (PayloadJSON (keys, _, rows, isObject)) returnings)) =
+requestToQuery schema _ (DbMutate (Insert mainTbl (PayloadJSON (keys, _, rows, isObject, _)) returnings)) =
   insInto <> vals <> ret
   where qi = QualifiedIdentifier schema mainTbl
         cols = map pgFmtIdent $ S.toList keys
@@ -309,18 +309,21 @@ requestToQuery schema _ (DbMutate (Insert mainTbl (PayloadJSON (keys, _, rows, i
         ret = if null returnings
                   then ""
                   else unwords [" RETURNING ", intercalate ", " (map (pgFmtColumn qi) returnings)]
-requestToQuery schema _ (DbMutate (Update mainTbl (PayloadJSON (keys, _, _, isObject)) logicForest returnings)) =
-  let cols = intercalate ", " (pgFmtIdent <> const " = _." <> pgFmtIdent <$> S.toList keys) in
-  unwords [
-    "UPDATE ", fromQi qi,
-    " SET " <> cols <> 
-    (if isObject
-      then " FROM (SELECT * FROM json_populate_record(null::"
-      else " FROM (SELECT * FROM json_populate_recordset(null::") <> 
-    fromQi qi <> ", $1)) _ ",
-    ("WHERE " <> intercalate " AND " (map (pgFmtLogicTree qi) logicForest)) `emptyOnFalse` null logicForest,
-    ("RETURNING " <> intercalate ", " (map (pgFmtColumn qi) returnings)) `emptyOnFalse` null returnings
-    ]
+requestToQuery schema _ (DbMutate (Update mainTbl (PayloadJSON (keys, _, _, isObject, isEmpty)) logicForest returnings)) =
+  if isEmpty 
+    then "WITH ignored_udpate AS (SELECT $1::text) SELECT ''"
+    else do
+      let cols = intercalate ", " (pgFmtIdent <> const " = _." <> pgFmtIdent <$> S.toList keys)
+      unwords [
+        "UPDATE ", fromQi qi,
+        " SET " <> cols <> 
+        (if isObject
+          then " FROM (SELECT * FROM json_populate_record(null::"
+          else " FROM (SELECT * FROM json_populate_recordset(null::") <> 
+        fromQi qi <> ", $1)) _ ",
+        ("WHERE " <> intercalate " AND " (map (pgFmtLogicTree qi) logicForest)) `emptyOnFalse` null logicForest,
+        ("RETURNING " <> intercalate ", " (map (pgFmtColumn qi) returnings)) `emptyOnFalse` null returnings 
+        ]
   where
     qi = QualifiedIdentifier schema mainTbl
 requestToQuery schema _ (DbMutate (Delete mainTbl logicForest returnings)) =

@@ -13,7 +13,7 @@ module PostgREST.ApiRequest ( ApiRequest(..)
 
 import           Protolude
 import qualified Data.Aeson                as JSON
-import           Data.Aeson.Types          (emptyObject)
+import           Data.Aeson.Types          (emptyObject, emptyArray)
 import qualified Data.ByteString           as BS
 import qualified Data.ByteString.Internal  as BS (c2w)
 import qualified Data.ByteString.Lazy      as BL
@@ -168,7 +168,7 @@ userApiRequest schema req reqBody
         let temp = M.fromList . map (toS *** JSON.String . toS) . parseSimpleQuery
                    $ toS reqBody
             keys = M.keys temp in
-        Right $ PayloadJSON (S.fromList keys, JSON.encode temp, 1, True)
+        Right $ PayloadJSON (S.fromList keys, JSON.encode temp, 1, True, emptyObject == JSON.Object temp)
       ct ->
         Left $ toS $ "Content-Type not acceptable: " <> toMime ct
   topLevelRange = fromMaybe allRange $ M.lookup "limit" ranges
@@ -291,15 +291,15 @@ csvToJson (_, vals) =
 
 -- | Convert {foo} to [{foo}], leave arrays unchanged
 -- and truncate everything else to an empty array.
-pluralize :: JSON.Value -> (Bool, JSON.Array)
-pluralize obj@(JSON.Object _) = (True, V.singleton obj)
-pluralize (JSON.Array arr)    = (False, arr)
-pluralize _                   = (False, V.empty)
+pluralize :: JSON.Value -> (Bool, JSON.Array, Bool)
+pluralize obj@(JSON.Object _) = (True, V.singleton obj, obj == emptyObject)
+pluralize jarr@(JSON.Array arr)    = (False, arr, jarr == emptyArray)
+pluralize _                   = (False, V.empty, False)
 
 -- | Test that Array contains only Objects having the same keys
 -- and if so mark it as PayloadJSON
-ensureUniform :: BL.ByteString -> (Bool, JSON.Array) -> Maybe PayloadJSON
-ensureUniform p (isObject, arr) =
+ensureUniform :: BL.ByteString -> (Bool, JSON.Array, Bool) -> Maybe PayloadJSON
+ensureUniform p (isObject, arr, isEmpty) =
   let objs :: V.Vector JSON.Object
       objs = foldr -- filter non-objects, map to raw objects
                (\val result -> case val of
@@ -311,7 +311,7 @@ ensureUniform p (isObject, arr) =
       areKeysUniform = all (==canonicalKeys) keysPerObj in
 
   if (V.length objs == V.length arr) && areKeysUniform
-    then Just $ PayloadJSON (canonicalKeys, p, V.length arr, isObject)
+    then Just $ PayloadJSON (canonicalKeys, p, V.length arr, isObject, isEmpty)
     else Nothing
 
 ensureUniform2 :: JSON.Array -> Maybe PayloadJSON
@@ -327,5 +327,5 @@ ensureUniform2 arr =
       areKeysUniform = all (==canonicalKeys) keysPerObj in
 
   if (V.length objs == V.length arr) && areKeysUniform
-    then Just $ PayloadJSON (canonicalKeys, JSON.encode objs, V.length arr, False)
+    then Just $ PayloadJSON (canonicalKeys, JSON.encode objs, V.length arr, False, emptyArray == JSON.Array arr)
     else Nothing

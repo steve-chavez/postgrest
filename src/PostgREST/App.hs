@@ -136,7 +136,7 @@ app dbStructure conf apiRequest =
                       )
                     ] (toS body)
 
-        (ActionCreate, TargetIdent (QualifiedIdentifier _ table), Just (PayloadJSON (_, bs, rows, _))) ->
+        (ActionCreate, TargetIdent (QualifiedIdentifier _ table), Just (PayloadJSON (_, bs, rows, _, _))) ->
           case mutateSqlParts of
             Left errorResponse -> return errorResponse
             Right (sq, mq) -> do
@@ -168,8 +168,8 @@ app dbStructure conf apiRequest =
                     if iPreferRepresentation apiRequest == Full
                       then toS body else ""
 
-        (ActionUpdate, TargetIdent _, Just (PayloadJSON (_, bs, rows, _))) ->
-          case (mutateSqlParts, rows == 0, iPreferRepresentation apiRequest == Full) of
+        (ActionUpdate, TargetIdent _, Just (PayloadJSON (_, bs, _, _, isEmpty))) ->
+          case (mutateSqlParts, isEmpty, iPreferRepresentation apiRequest == Full) of
             (Left errorResponse, _, _) -> return errorResponse
             (_, True, True) -> return $ responseLBS status200 [contentRangeH 1 0 Nothing] "[]"
             (_, True, False) -> return $ responseLBS status204 [contentRangeH 1 0 Nothing] ""
@@ -239,7 +239,7 @@ app dbStructure conf apiRequest =
             Left errorResponse -> return errorResponse
             Right ((q, cq), bField, params) -> do
               let (prms, keys, isObject) = case payload of
-                          Just (PayloadJSON (ks, bs, _, isO)) -> (bs, ks, isO)
+                          Just (PayloadJSON (ks, bs, _, isO, _)) -> (bs, ks, isO)
                           Nothing -> do
                             let temp = M.fromList $ second toJSON <$> params
                                 temp2 = S.fromList $ fst <$> params
