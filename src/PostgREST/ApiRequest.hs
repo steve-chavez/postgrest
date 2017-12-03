@@ -162,15 +162,13 @@ userApiRequest schema req reqBody
                then Right emptyObject
                else JSON.eitherDecode p
       CTTextCSV ->
-        let p = reqBody in
-        note "All lines must have same number of fields" . ensureUniform p . csvToJson
-          =<< CSV.decodeByName p
+        note "All lines must have same number of fields" . ensureUniform2 . csvToJson
+          =<< CSV.decodeByName reqBody
       CTOther "application/x-www-form-urlencoded" ->
-        let p    = reqBody
-            temp = M.fromList . map (toS *** JSON.String . toS) . parseSimpleQuery
-                   $ toS p
+        let temp = M.fromList . map (toS *** JSON.String . toS) . parseSimpleQuery
+                   $ toS reqBody
             keys = M.keys temp in
-        Right $ PayloadJSON (S.fromList keys, p, 1)
+        Right $ PayloadJSON (S.fromList keys, JSON.encode temp, 1)
       ct ->
         Left $ toS $ "Content-Type not acceptable: " <> toMime ct
   topLevelRange = fromMaybe allRange $ M.lookup "limit" ranges
@@ -314,4 +312,20 @@ ensureUniform p arr =
 
   if (V.length objs == V.length arr) && areKeysUniform
     then Just $ PayloadJSON (canonicalKeys, p, V.length arr)
+    else Nothing
+
+ensureUniform2 :: JSON.Array -> Maybe PayloadJSON
+ensureUniform2 arr =
+  let objs :: V.Vector JSON.Object
+      objs = foldr -- filter non-objects, map to raw objects
+               (\val result -> case val of
+                  JSON.Object o -> V.cons o result
+                  _ -> result)
+               V.empty arr
+      keysPerObj = V.map (S.fromList . M.keys) objs
+      canonicalKeys = fromMaybe S.empty $ keysPerObj V.!? 0
+      areKeysUniform = all (==canonicalKeys) keysPerObj in
+
+  if (V.length objs == V.length arr) && areKeysUniform
+    then Just $ PayloadJSON (canonicalKeys, JSON.encode objs, V.length arr)
     else Nothing
