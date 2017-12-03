@@ -135,7 +135,7 @@ data Relation = Relation {
 
 -- | An array of JSON objects that has been verified to have
 -- the same keys in every object
-newtype PayloadJSON = PayloadJSON (S.Set Text, BL.ByteString, Int) deriving (Show, Eq)
+newtype PayloadJSON = PayloadJSON (S.Set Text, BL.ByteString, Int, Bool) deriving (Show, Eq)
 
 data Proxy = Proxy {
   proxyScheme     :: Text

@@ -168,7 +168,7 @@ userApiRequest schema req reqBody
         let temp = M.fromList . map (toS *** JSON.String . toS) . parseSimpleQuery
                    $ toS reqBody
             keys = M.keys temp in
-        Right $ PayloadJSON (S.fromList keys, JSON.encode temp, 1)
+        Right $ PayloadJSON (S.fromList keys, JSON.encode temp, 1, True)
       ct ->
         Left $ toS $ "Content-Type not acceptable: " <> toMime ct
   topLevelRange = fromMaybe allRange $ M.lookup "limit" ranges
@@ -291,15 +291,15 @@ csvToJson (_, vals) =
 
 -- | Convert {foo} to [{foo}], leave arrays unchanged
 -- and truncate everything else to an empty array.
-pluralize :: JSON.Value -> JSON.Array
-pluralize obj@(JSON.Object _) = V.singleton obj
-pluralize (JSON.Array arr)    = arr
-pluralize _                   = V.empty
+pluralize :: JSON.Value -> (Bool, JSON.Array)
+pluralize obj@(JSON.Object _) = (True, V.singleton obj)
+pluralize (JSON.Array arr)    = (False, arr)
+pluralize _                   = (False, V.empty)
 
 -- | Test that Array contains only Objects having the same keys
 -- and if so mark it as PayloadJSON
-ensureUniform :: BL.ByteString -> JSON.Array -> Maybe PayloadJSON
-ensureUniform p arr =
+ensureUniform :: BL.ByteString -> (Bool, JSON.Array) -> Maybe PayloadJSON
+ensureUniform p (isObject, arr) =
   let objs :: V.Vector JSON.Object
       objs = foldr -- filter non-objects, map to raw objects
                (\val result -> case val of
@@ -311,7 +311,7 @@ ensureUniform p arr =
       areKeysUniform = all (==canonicalKeys) keysPerObj in
 
   if (V.length objs == V.length arr) && areKeysUniform
-    then Just $ PayloadJSON (canonicalKeys, p, V.length arr)
+    then Just $ PayloadJSON (canonicalKeys, p, V.length arr, isObject)
     else Nothing
 
 ensureUniform2 :: JSON.Array -> Maybe PayloadJSON
@@ -327,5 +327,5 @@ ensureUniform2 arr =
       areKeysUniform = all (==canonicalKeys) keysPerObj in
 
   if (V.length objs == V.length arr) && areKeysUniform
-    then Just $ PayloadJSON (canonicalKeys, JSON.encode objs, V.length arr)
+    then Just $ PayloadJSON (canonicalKeys, JSON.encode objs, V.length arr, False)
     else Nothing

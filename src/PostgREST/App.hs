@@ -135,7 +135,7 @@ app dbStructure conf apiRequest =
                       )
                     ] (toS body)
 
-        (ActionCreate, TargetIdent (QualifiedIdentifier _ table), Just (PayloadJSON (_, bs, rows))) ->
+        (ActionCreate, TargetIdent (QualifiedIdentifier _ table), Just (PayloadJSON (_, bs, rows, _))) ->
           case mutateSqlParts of
             Left errorResponse -> return errorResponse
             Right (sq, mq) -> do
@@ -167,7 +167,7 @@ app dbStructure conf apiRequest =
                     if iPreferRepresentation apiRequest == Full
                       then toS body else ""
 
-        (ActionUpdate, TargetIdent _, Just (PayloadJSON (_, bs, rows))) ->
+        (ActionUpdate, TargetIdent _, Just (PayloadJSON (_, bs, rows, _))) ->
           case (mutateSqlParts, rows == 0, iPreferRepresentation apiRequest == Full) of
             (Left errorResponse, _, _) -> return errorResponse
             (_, True, True) -> return $ responseLBS status200 [contentRangeH 1 0 Nothing] "[]"
@@ -238,7 +238,7 @@ app dbStructure conf apiRequest =
             Left errorResponse -> return errorResponse
             Right ((q, cq), bField, params) -> do
               let prms = case payload of
-                          Just (PayloadJSON (_, bs, _)) -> bs
+                          Just (PayloadJSON (_, bs, _, _)) -> bs
                           Nothing -> encode $ M.fromList $ second toJSON <$> params
                   singular = contentType == CTSingularJSON
                   paramsAsSingleObject = iPreferSingleObjectParameter apiRequest
