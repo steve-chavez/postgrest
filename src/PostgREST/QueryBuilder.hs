@@ -171,7 +171,7 @@ callProc qi pgArgs returnsScalar selectQuery countQuery countTotal isSingle para
        FROM ({selectQuery}) _postgrest_t;|]
 
     (argsRecord, args) | paramsAsJson && not isReadOnly  = ("SELECT NULL", "$1")
-                       | null pgArgs = ("SELECT NULL", "")
+                       | null pgArgs = ("SELECT $1::text", "")
                        | otherwise = (
                            "SELECT * FROM json_to_record($1) AS _(" <> intercalate ", " ((\a -> pgaName a <> " " <> pgaType a) <$> pgArgs) <> ")",
                            intercalate ", " ((\a -> pgaName a <> " := (SELECT " <> pgaName a <> " FROM _args_record)") <$> pgArgs)
@@ -311,6 +311,7 @@ requestToQuery schema _ (DbMutate (Delete mainTbl logicForest returnings)) =
   where
     qi = QualifiedIdentifier schema mainTbl
     query = unwords [
+      "WITH ignored_body AS (SELECT $1::text)",
       "DELETE FROM ", fromQi qi,
       ("WHERE " <> intercalate " AND " (map (pgFmtLogicTree qi) logicForest)) `emptyOnFalse` null logicForest,
       ("RETURNING " <> intercalate ", " (map (pgFmtColumn qi) returnings)) `emptyOnFalse` null returnings
