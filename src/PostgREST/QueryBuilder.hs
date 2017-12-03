@@ -290,7 +290,11 @@ requestToQuery schema _ (DbMutate (Insert mainTbl (PayloadJSON (keys, _, rows, i
   where qi = QualifiedIdentifier schema mainTbl
         cols = map pgFmtIdent $ S.toList keys
         colsString = intercalate ", " cols
-        insInto = unwords [ "INSERT INTO" , fromQi qi,
+        insInto = unwords [ 
+          (if T.null colsString
+            then "WITH ignored_body AS (SELECT $1::text)"
+            else ""),
+          "INSERT INTO" , fromQi qi,
             if T.null colsString then "" else "(" <> colsString <> ")"
           ]
         vals = unwords $
