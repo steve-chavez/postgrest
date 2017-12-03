@@ -170,7 +170,7 @@ callProc qi pgArgs returnsScalar selectQuery countQuery countTotal isSingle para
          {responseHeaders} AS response_headers
        FROM ({selectQuery}) _postgrest_t;|]
 
-    (argsRecord, args) | paramsAsJson && not isReadOnly  = ("SELECT NULL", "$1")
+    (argsRecord, args) | paramsAsJson && not isReadOnly  = ("SELECT NULL", "$1::json")
                        | null pgArgs = ("SELECT $1::text", "")
                        | otherwise = (
                            "SELECT * FROM " <>
