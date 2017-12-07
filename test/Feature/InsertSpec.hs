@@ -416,8 +416,15 @@ spec = do
         -- put value back for other tests
         void $ request methodPatch "/items?id=eq.99" [] [json| { "id":1 } |]
 
-      it "makes no updates and returns 204, when patching with an empty json object" $ do
+      it "makes no updates and returns 204, when patching with an empty json object/array" $ do
         request methodPatch "/items" [] [json| {} |]
+          `shouldRespondWith` ""
+          {
+            matchStatus  = 204,
+            matchHeaders = ["Content-Range" <:> "*/*"]
+          }
+
+        request methodPatch "/items" [] [json| [] |]
           `shouldRespondWith` ""
           {
             matchStatus  = 204,

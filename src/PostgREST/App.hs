@@ -38,7 +38,6 @@ import           PostgREST.Config          (AppConfig (..))
 import           PostgREST.DbStructure
 import           PostgREST.DbRequestBuilder( readRequest
                                            , mutateRequest
-                                           , readRpcRequest
                                            , fieldNames
                                            )
 import           PostgREST.Error           ( simpleError, pgError
@@ -96,8 +95,8 @@ transactionMode structure target action =
     ActionInvoke{isReadOnly=False} ->
       let proc =
             case target of
-              (TargetProc qi) -> M.lookup (qiName qi) $
-                                   dbProcs structure
+              -- TODO: this proc search won't be accurate when the function is overloaded
+              (TargetProc qi) -> join $ headMay <$> M.lookup (qiName qi) (dbProcs structure)
               _               -> Nothing
           v = fromMaybe Volatile $ pdVolatility <$> proc in
       if v == Stable || v == Immutable
@@ -228,31 +227,39 @@ app dbStructure conf apiRequest =
               let acceptH = (hAllow, if tableInsertable table then "GET,POST,PATCH,DELETE" else "GET") in
               return $ responseLBS status200 [allOrigins, acceptH] ""
 
-        (ActionInvoke _isReadOnly, TargetProc qi, payload) ->
-          let proc = M.lookup (qiName qi) allProcs
+        (ActionInvoke _, TargetProc qi, Just (PayloadJSON payload pType pKeys)) ->
+          let paramsAsSingleObject = iPreferSingleObjectParameter apiRequest
+              procs = M.lookup (qiName qi) allProcs
+              proc = join $
+                -- Handle overloaded functions case
+                (case length <$> procs of
+                  Just 1 -> headMay
+                  _ -> find (\x ->
+                         if paramsAsSingleObject
+                           then length (pdArgs x) == 1 -- if the arg is not of json type let the db give the err
+                           else pKeys `S.isSubsetOf` S.fromList (pgaName <$> pdArgs x))
+                ) <$> procs
               returnsScalar = case proc of
                 Just ProcDescription{pdReturnType = (Single (Scalar _))} -> True
                 _ -> False
               rpcBinaryField = if returnsScalar
                                  then Right Nothing
                                  else binaryField contentType =<< fldNames
-              parts = (,,) <$> readSqlParts <*> rpcBinaryField <*> rpcQParams in
+              parts = (,) <$> readSqlParts <*> rpcBinaryField in
           case parts of
             Left errorResponse -> return errorResponse
-            Right ((q, cq), bField, params) -> do
-              let (prms, keys, isObject) = case payload of
-                          Just (PayloadJSON p (PJArray _) ks) -> (p, ks, False)
-                          Just (PayloadJSON p PJObject ks)  -> (p, ks, True)
-                          Nothing -> (JSON.encode $ M.fromList $ second JSON.toJSON <$> params, S.fromList $ fst <$> params, True)
+            Right ((q, cq), bField) -> do
+              let isObject = case pType of
+                                PJObject  -> True
+                                PJArray _ -> False
                   singular = contentType == CTSingularJSON
-                  paramsAsSingleObject = iPreferSingleObjectParameter apiRequest
-                  specifiedPgArgs = filter (flip S.member keys . pgaName) $ fromMaybe [] (pdArgs <$> proc)
-              row <- H.query (toS prms) $
+                  specifiedPgArgs = filter (flip S.member pKeys . pgaName) $ fromMaybe [] (pdArgs <$> proc)
+              row <- H.query (toS payload) $
                 callProc qi specifiedPgArgs returnsScalar q cq shouldCount
                          singular paramsAsSingleObject
                          (contentType == CTTextCSV)
-                         (contentType == CTOctetStream) _isReadOnly bField
-                         isObject (pgVersion dbStructure)
+                         (contentType == CTOctetStream) bField isObject
+                         (pgVersion dbStructure)
               let (tableTotal, queryTotal, body, jsonHeaders) =
                     fromMaybe (Just 0, 0, "[]", "[]") row
                   (status, contentRange) = rangeHeader queryTotal tableTotal
@@ -273,7 +280,7 @@ app dbStructure conf apiRequest =
               uri Nothing = ("http", host, port, "/")
               uri (Just Proxy { proxyScheme = s, proxyHost = h, proxyPort = p, proxyPath = b }) = (s, h, p, b)
               uri' = uri proxy
-              encodeApi ti sd procs = encodeOpenAPI (M.elems procs) (toTableInfo ti) uri' sd (dbPrimaryKeys dbStructure)
+              encodeApi ti sd procs = encodeOpenAPI (concat $ M.elems procs) (toTableInfo ti) uri' sd (dbPrimaryKeys dbStructure)
           body <- encodeApi <$> H.query schema accessibleTables <*> H.query schema schemaDescription <*> H.query schema accessibleProcs
           return $ responseLBS status200 [toHeader CTOpenAPI] $ toS body
 
@@ -308,7 +315,6 @@ app dbStructure conf apiRequest =
       fldNames = fieldNames <$> readReq
       readDbRequest = DbRead <$> readReq
       mutateDbRequest = DbMutate <$> (mutateRequest apiRequest =<< fldNames)
-      rpcQParams = readRpcRequest apiRequest
       selectQuery = requestToQuery schema False <$> readDbRequest
       mutateQuery = requestToQuery schema False <$> mutateDbRequest
       countQuery = requestToCountQuery schema <$> readDbRequest

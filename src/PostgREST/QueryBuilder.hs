@@ -135,9 +135,9 @@ createWriteStatement selectQuery mutateQuery wantSingle wantHdrs asCsv rep pKeys
 
 type ProcResults = (Maybe Int64, Int64, ByteString, ByteString)
 callProc :: QualifiedIdentifier -> [PgArg] -> Bool -> SqlQuery -> SqlQuery -> Bool ->
-            Bool -> Bool -> Bool -> Bool -> Bool -> Maybe FieldName -> Bool -> PgVersion ->
+            Bool -> Bool -> Bool -> Bool -> Maybe FieldName -> Bool -> PgVersion ->
             H.Query ByteString (Maybe ProcResults)
-callProc qi pgArgs returnsScalar selectQuery countQuery countTotal isSingle paramsAsSingleObject asCsv asBinary isReadOnly binaryField isObject pgVer =
+callProc qi pgArgs returnsScalar selectQuery countQuery countTotal isSingle paramsAsSingleObject asCsv asBinary binaryField isObject pgVer =
   unicodeStatement sql (HE.value HE.unknown) decodeProc True
   where
     sql =
@@ -164,7 +164,7 @@ callProc qi pgArgs returnsScalar selectQuery countQuery countTotal isSingle para
          {responseHeaders} AS response_headers
        FROM ({selectQuery}) _postgrest_t;|]
 
-    (argsRecord, args) | paramsAsSingleObject && not isReadOnly  = ("_args_record AS (SELECT NULL)", "$1::json")
+    (argsRecord, args) | paramsAsSingleObject = ("_args_record AS (SELECT NULL)", "$1::json")
                        | null pgArgs = (ignoredBody, "")
                        | otherwise = (
                            "_args_record AS ( "<>
@@ -322,6 +322,7 @@ requestToQuery schema _ (DbMutate (Delete mainTbl logicForest returnings)) =
 -- Due to the use of the `unknown` encoder we need to cast '$1' when the value is not used in the main query
 -- otherwise the query will err with a `could not determine data type of parameter $1`.
 -- This happens because `unknown` relies on the context to determine the value type.
+-- The error also happens on raw libpq used with C.
 ignoredBody :: SqlFragment
 ignoredBody = "ignored_body AS (SELECT $1::text) "
 

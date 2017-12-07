@@ -3,7 +3,6 @@
 module PostgREST.DbRequestBuilder (
   readRequest
 , mutateRequest
-, readRpcRequest
 , fieldNames
 ) where
 
@@ -36,8 +35,9 @@ import           PostgREST.Types
 import           Protolude                hiding (from, dropWhile, drop)
 import           Text.Regex.TDFA         ((=~))
 import           Unsafe                  (unsafeHead)
+import           Safe                    (headMay)
 
-readRequest :: Maybe Integer -> [Relation] -> M.HashMap Text ProcDescription -> ApiRequest -> Either Response ReadRequest
+readRequest :: Maybe Integer -> [Relation] -> M.HashMap Text [ProcDescription] -> ApiRequest -> Either Response ReadRequest
 readRequest maxRows allRels allProcs apiRequest  =
   mapLeft apiRequestError $
   treeRestrictRange maxRows =<<
@@ -50,7 +50,8 @@ readRequest maxRows allRels allProcs apiRequest  =
         (TargetIdent (QualifiedIdentifier s t) ) -> Just (s, t)
         (TargetProc  (QualifiedIdentifier s proc) ) -> Just (s, tName)
           where
-            retType = pdReturnType <$> M.lookup proc allProcs
+            -- TODO: this proc search won't be accurate when the function is overloaded
+            retType = pdReturnType <$> join (headMay <$> M.lookup proc allProcs)
             tName = case retType of
               Just (SetOf (Composite qi)) -> qiName qi
               Just (Single (Composite qi)) -> qiName qi
@@ -326,11 +327,6 @@ mutateRequest apiRequest fldNames = mapLeft apiRequestError $
     -- update/delete filters can be only on the root table
     (mutateFilters, logicFilters) = join (***) onlyRoot (iFilters apiRequest, iLogic apiRequest)
     onlyRoot = filter (not . ( "." `isInfixOf` ) . fst)
-
-readRpcRequest :: ApiRequest -> Either Response [RpcQParam]
-readRpcRequest apiRequest = mapLeft apiRequestError rpcQParams
-  where
-    rpcQParams = mapM pRequestRpcQParam $ iRpcQParams apiRequest
 
 fieldNames :: ReadRequest -> [FieldName]
 fieldNames (Node (sel, _) forest) =

@@ -141,20 +141,22 @@ userApiRequest schema req reqBody
   isEmbedPath = T.isInfixOf "."
   isTargetingProc = fromMaybe False $ (== "rpc") <$> listToMaybe path
   payload =
-    case decodeContentType . fromMaybe "application/json" $ lookupHeader "content-type" of
-      CTApplicationJSON ->
+    case (decodeContentType . fromMaybe "application/json" $ lookupHeader "content-type", action) of
+      (_, ActionInvoke{isReadOnly=True}) ->
+        Right $ PayloadJSON (JSON.encode $ M.fromList $ second JSON.toJSON <$> rpcQParams) PJObject (S.fromList $ fst <$> rpcQParams)
+      (CTApplicationJSON, _) ->
         note "All object keys must match" . consPayloadJSON reqBody
           =<< if BL.null reqBody && isTargetingProc
                then Right emptyObject
                else JSON.eitherDecode reqBody
-      CTTextCSV -> do
+      (CTTextCSV, _) -> do
         json <- csvToJson <$> CSV.decodeByName reqBody
         note "All lines must have same number of fields" $ consPayloadJSON (JSON.encode json) json
-      CTOther "application/x-www-form-urlencoded" ->
+      (CTOther "application/x-www-form-urlencoded", _) ->
         let json = M.fromList . map (toS *** JSON.String . toS) . parseSimpleQuery $ toS reqBody
             keys = S.fromList $ M.keys json in
         Right $ PayloadJSON (JSON.encode json) PJObject keys
-      ct ->
+      (ct, _) ->
         Left $ toS $ "Content-Type not acceptable: " <> toMime ct
   topLevelRange = fromMaybe allRange $ M.lookup "limit" ranges
   action =
@@ -177,9 +179,8 @@ userApiRequest schema req reqBody
               ["rpc", proc] -> TargetProc
                               $ QualifiedIdentifier schema proc
               other         -> TargetUnknown other
-  shouldParsePayload = action `elem` [ActionCreate, ActionUpdate, ActionInvoke{isReadOnly=False}]
-  relevantPayload | action == ActionInvoke{isReadOnly=True} = Nothing
-                  | shouldParsePayload = rightToMaybe payload
+  shouldParsePayload = action `elem` [ActionCreate, ActionUpdate, ActionInvoke{isReadOnly=False}, ActionInvoke{isReadOnly=True}]
+  relevantPayload | shouldParsePayload = rightToMaybe payload
                   | otherwise = Nothing
   path            = pathInfo req
   method          = requestMethod req
