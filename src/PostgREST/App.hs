@@ -315,9 +315,9 @@ app dbStructure conf apiRequest =
       fldNames = fieldNames <$> readReq
       readDbRequest = DbRead <$> readReq
       mutateDbRequest = DbMutate <$> (mutateRequest apiRequest =<< fldNames)
-      selectQuery = requestToQuery schema False <$> readDbRequest
-      mutateQuery = requestToQuery schema False <$> mutateDbRequest
-      countQuery = requestToCountQuery schema <$> readDbRequest
+      selectQuery = requestToQuery False <$> readDbRequest
+      mutateQuery = requestToQuery False <$> mutateDbRequest
+      countQuery = requestToCountQuery <$> readDbRequest
       readSqlParts = (,) <$> selectQuery <*> countQuery
       mutateSqlParts = (,) <$> selectQuery <*> mutateQuery
 

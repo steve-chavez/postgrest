@@ -28,7 +28,7 @@ spec =
               { "hint": null,
                 "details":null,
                 "code":"42P01",
-                "message":"relation \"test.fakefake\" does not exist"
+                "message":"relation \"fakefake\" does not exist"
               } |]
           { matchStatus  = 404
           , matchHeaders = []

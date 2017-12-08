@@ -204,16 +204,15 @@ pgFmtLit x =
    then "E" <> slashed
    else slashed
 
-requestToCountQuery :: Schema -> DbRequest -> SqlQuery
-requestToCountQuery _ (DbMutate _) = undefined
-requestToCountQuery schema (DbRead (Node (Select _ _ logicForest _ _, (mainTbl, _, _, _)) _)) =
+requestToCountQuery :: DbRequest -> SqlQuery
+requestToCountQuery (DbMutate _) = undefined
+requestToCountQuery (DbRead (Node (Select _ _ logicForest _ _, (mainTbl, _, _, _)) _)) =
  unwords [
    "SELECT pg_catalog.count(*)",
-   "FROM ", fromQi qi,
-    ("WHERE " <> intercalate " AND " (map (pgFmtLogicTree qi) filteredLogic)) `emptyOnFalse` null filteredLogic
+   "FROM " <> pgFmtIdent mainTbl,
+    ("WHERE " <> intercalate " AND " (pgFmtLogicTree mainTbl <$> filteredLogic)) `emptyOnFalse` null filteredLogic
    ]
  where
-   qi = removeSourceCTESchema schema mainTbl
    -- all foreing key filters are root nodes(see addFilterToLogicForest), only those are filtered
    nonFKRoot :: LogicTree -> Bool
    nonFKRoot (Stmnt (Filter _ (OpExpr _ (Join _ _)))) = False
@@ -221,18 +220,16 @@ requestToCountQuery schema (DbRead (Node (Select _ _ logicForest _ _, (mainTbl, 
    nonFKRoot Expr{} = True
    filteredLogic = filter nonFKRoot logicForest
 
-requestToQuery :: Schema -> Bool -> DbRequest -> SqlQuery
-requestToQuery schema isParent (DbRead (Node (Select colSelects tbls logicForest ord range, (nodeName, maybeRelation, _, _)) forest)) =
+requestToQuery :: Bool -> DbRequest -> SqlQuery
+requestToQuery isParent (DbRead (Node (Select colSelects tbls logicForest ord range, (nodeName, maybeRelation, _, _)) forest)) =
   query
   where
     mainTbl = fromMaybe nodeName (tableName . relTable <$> maybeRelation)
-    qi = removeSourceCTESchema schema mainTbl
-    toQi = removeSourceCTESchema schema
     query = unwords [
-      "SELECT ", intercalate ", " (map (pgFmtSelectItem qi) colSelects ++ selects),
-      "FROM ", intercalate ", " (map (fromQi . toQi) tbls),
+      "SELECT ", intercalate ", " (map (pgFmtSelectItem mainTbl) colSelects ++ selects),
+      "FROM ", intercalate ", " (map pgFmtIdent tbls),
       unwords joins,
-      ("WHERE " <> intercalate " AND " (map (pgFmtLogicTree qi) logicForest)) `emptyOnFalse` null logicForest,
+      ("WHERE " <> intercalate " AND " (map (pgFmtLogicTree mainTbl) logicForest)) `emptyOnFalse` null logicForest,
       orderF (fromMaybe [] ord),
       if isParent then "" else limitF range
       ]
@@ -244,7 +241,7 @@ requestToQuery schema isParent (DbRead (Node (Select colSelects tbls logicForest
             clause = intercalate "," (map queryTerm ts)
             queryTerm :: OrderTerm -> Text
             queryTerm t = " "
-                <> toS (pgFmtField qi $ otTerm t) <> " "
+                <> toS (pgFmtField mainTbl $ otTerm t) <> " "
                 <> maybe "" show (otDirection t) <> " "
                 <> maybe "" show (otNullOrder t) <> " "
     (joins, selects) = foldr getQueryParts ([],[]) forest
@@ -256,29 +253,29 @@ requestToQuery schema isParent (DbRead (Node (Select colSelects tbls logicForest
            <> "SELECT array_to_json(array_agg(row_to_json(" <> pgFmtIdent table <> ".*))) "
            <> "FROM (" <> subquery <> ") " <> pgFmtIdent table
            <> "), '[]') AS " <> pgFmtIdent (fromMaybe name alias)
-           where subquery = requestToQuery schema False (DbRead (Node n forst))
+           where subquery = requestToQuery False (DbRead (Node n forst))
     getQueryParts (Node n@(_, (name, Just Relation{relType=Parent,relTable=Table{tableName=table}}, alias, _)) forst) (j,s) = (joi:j,sel:s)
       where
         aliasOrName = fromMaybe name alias
         localTableName = pgFmtIdent $ table <> "_" <> aliasOrName
         sel = "row_to_json(" <> localTableName <> ".*) AS " <> pgFmtIdent aliasOrName
         joi = " LEFT JOIN LATERAL( " <> subquery <> " ) AS " <> localTableName <> " ON TRUE "
-          where subquery = requestToQuery schema True (DbRead (Node n forst))
+          where subquery = requestToQuery True (DbRead (Node n forst))
     getQueryParts (Node n@(_, (name, Just Relation{relType=Many,relTable=Table{tableName=table}}, alias, _)) forst) (j,s) = (j,sel:s)
       where
         sel = "COALESCE (("
            <> "SELECT array_to_json(array_agg(row_to_json(" <> pgFmtIdent table <> ".*))) "
            <> "FROM (" <> subquery <> ") " <> pgFmtIdent table
            <> "), '[]') AS " <> pgFmtIdent (fromMaybe name alias)
-           where subquery = requestToQuery schema False (DbRead (Node n forst))
+           where subquery = requestToQuery False (DbRead (Node n forst))
     --the following is just to remove the warning
     --getQueryParts is not total but requestToQuery is called only after addJoinConditions which ensures the only
     --posible relations are Child Parent Many
     getQueryParts _ _ = undefined
-requestToQuery schema _ (DbMutate (Insert mainTbl p@(PayloadJSON _ pType keys) returnings)) =
+requestToQuery _ (DbMutate (Insert mainTbl p@(PayloadJSON _ pType keys) returnings)) =
   unwords [
     ("WITH " <> ignoredBody) `emptyOnFalse` not payloadIsEmpty,
-    "INSERT INTO ", fromQi qi, if payloadIsEmpty then " " else "(" <> cols <> ") ",
+    "INSERT INTO ", pgFmtIdent mainTbl, if payloadIsEmpty then " " else "(" <> cols <> ") ",
     case (pType, payloadIsEmpty) of
       (PJArray _, True) -> "SELECT null WHERE false"
       (PJObject, True)  -> "DEFAULT VALUES"
@@ -286,38 +283,34 @@ requestToQuery schema _ (DbMutate (Insert mainTbl p@(PayloadJSON _ pType keys) r
         "SELECT " <> cols <> " FROM ",
         case pType of
           PJObject  -> "json_populate_record"
-          PJArray _ -> "json_populate_recordset", "(null::", fromQi qi, ", $1) "],
-    ("RETURNING " <> intercalate ", " (map (pgFmtColumn qi) returnings)) `emptyOnFalse` null returnings
+          PJArray _ -> "json_populate_recordset", "(null::", pgFmtIdent mainTbl, ", $1) "],
+    ("RETURNING " <> intercalate ", " (pgFmtColumn mainTbl <$> returnings)) `emptyOnFalse` null returnings
     ]
   where
-    qi = QualifiedIdentifier schema mainTbl
     cols = intercalate ", " $ pgFmtIdent <$> S.toList keys
     payloadIsEmpty = pjIsEmpty p
-requestToQuery schema _ (DbMutate (Update mainTbl p@(PayloadJSON _ pType keys) logicForest returnings)) =
+requestToQuery _ (DbMutate (Update mainTbl p@(PayloadJSON _ pType keys) logicForest returnings)) =
   if pjIsEmpty p
     then "WITH " <> ignoredBody <> "SELECT ''"
     else
       unwords [
-        "UPDATE " <> fromQi qi <> " SET " <> cols,
+        "UPDATE " <> pgFmtIdent mainTbl <> " SET " <> cols,
         "FROM (SELECT * FROM ",
         case pType of
            PJObject  -> " json_populate_record"
-           PJArray _ -> " json_populate_recordset", "(null::", fromQi qi, ", $1)) _ ",
-        ("WHERE " <> intercalate " AND " (map (pgFmtLogicTree qi) logicForest)) `emptyOnFalse` null logicForest,
-        ("RETURNING " <> intercalate ", " (map (pgFmtColumn qi) returnings)) `emptyOnFalse` null returnings
+           PJArray _ -> " json_populate_recordset", "(null::", pgFmtIdent mainTbl, ", $1)) _ ",
+        ("WHERE " <> intercalate " AND " (pgFmtLogicTree mainTbl <$> logicForest)) `emptyOnFalse` null logicForest,
+        ("RETURNING " <> intercalate ", " (pgFmtColumn mainTbl <$> returnings)) `emptyOnFalse` null returnings
         ]
   where
-    qi = QualifiedIdentifier schema mainTbl
     cols = intercalate ", " (pgFmtIdent <> const " = _." <> pgFmtIdent <$> S.toList keys)
-requestToQuery schema _ (DbMutate (Delete mainTbl logicForest returnings)) =
+requestToQuery _ (DbMutate (Delete mainTbl logicForest returnings)) =
   unwords [
     "WITH " <> ignoredBody,
-    "DELETE FROM ", fromQi qi,
-    ("WHERE " <> intercalate " AND " (map (pgFmtLogicTree qi) logicForest)) `emptyOnFalse` null logicForest,
-    ("RETURNING " <> intercalate ", " (map (pgFmtColumn qi) returnings)) `emptyOnFalse` null returnings
+    "DELETE FROM " <> pgFmtIdent mainTbl,
+    ("WHERE " <> intercalate " AND " (pgFmtLogicTree mainTbl <$> logicForest)) `emptyOnFalse` null logicForest,
+    ("RETURNING " <> intercalate ", " (pgFmtColumn mainTbl <$> returnings)) `emptyOnFalse` null returnings
     ]
-  where
-    qi = QualifiedIdentifier schema mainTbl
 
 -- Due to the use of the `unknown` encoder we need to cast '$1' when the value is not used in the main query
 -- otherwise the query will err with a `could not determine data type of parameter $1`.
@@ -325,9 +318,6 @@ requestToQuery schema _ (DbMutate (Delete mainTbl logicForest returnings)) =
 -- The error also happens on raw libpq used with C.
 ignoredBody :: SqlFragment
 ignoredBody = "ignored_body AS (SELECT $1::text) "
-
-removeSourceCTESchema :: Schema -> TableName -> QualifiedIdentifier
-removeSourceCTESchema schema tbl = QualifiedIdentifier (if tbl == sourceCTEName then "" else schema) tbl
 
 unquoted :: JSON.Value -> Text
 unquoted (JSON.String t) = t
@@ -392,18 +382,18 @@ unicodeStatement = H.statement . T.encodeUtf8
 emptyOnFalse :: Text -> Bool -> Text
 emptyOnFalse val cond = if cond then "" else val
 
-pgFmtColumn :: QualifiedIdentifier -> Text -> SqlFragment
-pgFmtColumn table "*" = fromQi table <> ".*"
-pgFmtColumn table c = fromQi table <> "." <> pgFmtIdent c
+pgFmtColumn :: TableName -> Text -> SqlFragment
+pgFmtColumn table "*" = pgFmtIdent table <> ".*"
+pgFmtColumn table c = pgFmtIdent table <> "." <> pgFmtIdent c
 
-pgFmtField :: QualifiedIdentifier -> Field -> SqlFragment
+pgFmtField :: TableName -> Field -> SqlFragment
 pgFmtField table (c, jp) = pgFmtColumn table c <> pgFmtJsonPath jp
 
-pgFmtSelectItem :: QualifiedIdentifier -> SelectItem -> SqlFragment
+pgFmtSelectItem :: TableName -> SelectItem -> SqlFragment
 pgFmtSelectItem table (f@(_, jp), Nothing, alias, _) = pgFmtField table f <> pgFmtAs jp alias
 pgFmtSelectItem table (f@(_, jp), Just cast, alias, _) = "CAST (" <> pgFmtField table f <> " AS " <> cast <> " )" <> pgFmtAs jp alias
 
-pgFmtFilter :: QualifiedIdentifier -> Filter -> SqlFragment
+pgFmtFilter :: TableName -> Filter -> SqlFragment
 pgFmtFilter table (Filter fld (OpExpr hasNot oper)) = notOp <> " " <> case oper of
    Op op val  -> pgFmtFieldOp op <> " " <> case op of
      "like"   -> unknownLiteral (T.map star val)
@@ -426,7 +416,7 @@ pgFmtFilter table (Filter fld (OpExpr hasNot oper)) = notOp <> " " <> case oper 
        <> ") "
 
    Join fQi (ForeignKey Column{colTable=Table{tableName=fTableName}, colName=fColName}) ->
-     pgFmtField fQi fld <> " = " <> pgFmtColumn (removeSourceCTESchema (qiSchema fQi) fTableName) fColName
+     pgFmtField (qiName fQi) fld <> " = " <> pgFmtColumn fTableName fColName
  where
    pgFmtFieldOp op = pgFmtField table fld <> " " <> sqlOperator op
    sqlOperator o = HM.lookupDefault "=" o operators
@@ -438,10 +428,10 @@ pgFmtFilter table (Filter fld (OpExpr hasNot oper)) = notOp <> " " <> case oper 
      (toS (pgFmtLit v) <> "::unknown ")
      (find ((==) . toLower $ v) ["null","true","false"])
 
-pgFmtLogicTree :: QualifiedIdentifier -> LogicTree -> SqlFragment
-pgFmtLogicTree qi (Expr hasNot op forest) = notOp <> " (" <> intercalate (" " <> show op <> " ") (pgFmtLogicTree qi <$> forest) <> ")"
+pgFmtLogicTree :: TableName -> LogicTree -> SqlFragment
+pgFmtLogicTree tblName (Expr hasNot op forest) = notOp <> " (" <> intercalate (" " <> show op <> " ") (pgFmtLogicTree tblName <$> forest) <> ")"
   where notOp =  if hasNot then "NOT" else ""
-pgFmtLogicTree qi (Stmnt flt) = pgFmtFilter qi flt
+pgFmtLogicTree tblName (Stmnt flt) = pgFmtFilter tblName flt
 
 pgFmtJsonPath :: Maybe JsonPath -> SqlFragment
 pgFmtJsonPath (Just [x]) = "->>" <> pgFmtLit x
