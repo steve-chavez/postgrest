@@ -35,10 +35,9 @@ import           PostgREST.Types
 import           Protolude                hiding (from, dropWhile, drop)
 import           Text.Regex.TDFA         ((=~))
 import           Unsafe                  (unsafeHead)
-import           Safe                    (headMay)
 
-readRequest :: Maybe Integer -> [Relation] -> M.HashMap Text [ProcDescription] -> ApiRequest -> Either Response ReadRequest
-readRequest maxRows allRels allProcs apiRequest  =
+readRequest :: Maybe Integer -> [Relation] -> Maybe ProcDescription -> ApiRequest -> Either Response ReadRequest
+readRequest maxRows allRels proc apiRequest  =
   mapLeft apiRequestError $
   treeRestrictRange maxRows =<<
   augumentRequestWithJoin schema relations =<<
@@ -48,14 +47,12 @@ readRequest maxRows allRels allProcs apiRequest  =
       let target = iTarget apiRequest in
       case target of
         (TargetIdent (QualifiedIdentifier s t) ) -> Just (s, t)
-        (TargetProc  (QualifiedIdentifier s proc) ) -> Just (s, tName)
+        (TargetProc  (QualifiedIdentifier s pName) ) -> Just (s, tName)
           where
-            -- TODO: this proc search won't be accurate when the function is overloaded
-            retType = pdReturnType <$> join (headMay <$> M.lookup proc allProcs)
-            tName = case retType of
+            tName = case pdReturnType <$> proc of
               Just (SetOf (Composite qi)) -> qiName qi
               Just (Single (Composite qi)) -> qiName qi
-              _ -> proc
+              _ -> pName
 
         _ -> Nothing
 
