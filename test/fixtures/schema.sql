@@ -1352,3 +1352,10 @@ $$ language sql;
 create or replace function test.overloaded(a text, b text, c text) returns text as $$
   select a || b || c
 $$ language sql;
+
+create table test.leak(
+  id serial primary key,
+  blob bytea
+);
+
+CREATE FUNCTION test.leak(blob bytea) RETURNS void AS $$ BEGIN END; $$ LANGUAGE plpgsql;
