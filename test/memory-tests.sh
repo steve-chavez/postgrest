@@ -42,14 +42,14 @@ memoryTest(){
     do
       sleep 1
     done
-    BYTES=$(cat postgrest.prof | grep -o -P '(?<=alloc =).*(?=bytes)'| tr -d ' ,')
+    BYTES_FMT=$(cat postgrest.prof | grep -o -P '(?<=alloc =).*(?=bytes)' | tr -d ' ')
+    BYTES=$(echo $BYTES_FMT | tr -d ',')
     MAX_BYTES=$(numfmt --from=si $4)
-    BYTES_FMT="$(numfmt --grouping $BYTES) bytes"
     if test $BYTES -le $MAX_BYTES
     then
-      ok "$2 $3: with a $1 payload size the memory usage($BYTES_FMT) is less than $4"
+      ok "$2 $3: with a $1 payload size the memory usage($BYTES_FMT bytes) is less than $4"
     else
-      ko "$2 $3: with a $1 payload size the memory usage($BYTES_FMT) is more than $4"
+      ko "$2 $3: with a $1 payload size the memory usage($BYTES_FMT bytes) is more than $4"
     fi
   else
     pgrStop
