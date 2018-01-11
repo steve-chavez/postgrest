@@ -144,8 +144,8 @@ app dbStructure proc conf apiRequest =
                       )
                     ] (toS body)
 
-        (ActionCreate, TargetIdent (QualifiedIdentifier _ table), Just (PayloadJSON payload pType _)) ->
-          case mutateSqlParts of
+        (ActionCreate, TargetIdent (QualifiedIdentifier _ tName), Just (PayloadJSON payload pType _)) ->
+          case mutateSqlParts tName of
             Left errorResponse -> return errorResponse
             Right (sq, mq) -> do
               let (isSingle, nRows) = case pType of
@@ -156,7 +156,7 @@ app dbStructure proc conf apiRequest =
                  && iPreferRepresentation apiRequest == Full
                 then return $ singularityError (toInteger nRows)
                 else do
-                  let pKeys = map pkName $ filter (filterPk schema table) allPrKeys -- would it be ok to move primary key detection in the query itself?
+                  let pKeys = map pkName $ filter (filterPk schema tName) allPrKeys -- would it be ok to move primary key detection in the query itself?
                       stm = createWriteStatement sq mq
                         (contentType == CTSingularJSON) isSingle
                         (contentType == CTTextCSV) (iPreferRepresentation apiRequest)
@@ -166,7 +166,7 @@ app dbStructure proc conf apiRequest =
                       headers = catMaybes [
                           if null fs
                             then Nothing
-                            else Just (hLocation, "/" <> toS table <> renderLocationFields fs)
+                            else Just (hLocation, "/" <> toS tName <> renderLocationFields fs)
                         , if iPreferRepresentation apiRequest == Full
                             then Just $ toHeader contentType
                             else Nothing
@@ -178,8 +178,8 @@ app dbStructure proc conf apiRequest =
                     if iPreferRepresentation apiRequest == Full
                       then toS body else ""
 
-        (ActionUpdate, TargetIdent _, Just p@(PayloadJSON payload _ _)) ->
-          case (mutateSqlParts, pjIsEmpty p, iPreferRepresentation apiRequest == Full) of
+        (ActionUpdate, TargetIdent (QualifiedIdentifier _ tName), Just p@(PayloadJSON payload _ _)) ->
+          case (mutateSqlParts tName, pjIsEmpty p, iPreferRepresentation apiRequest == Full) of
             (Left errorResponse, _, _) -> return errorResponse
             (_, True, True) -> return $ responseLBS status200 [contentRangeH 1 0 Nothing] "[]"
             (_, True, False) -> return $ responseLBS status204 [contentRangeH 1 0 Nothing] ""
@@ -205,8 +205,8 @@ app dbStructure proc conf apiRequest =
                     then responseLBS s [toHeader contentType, r] (toS body)
                     else responseLBS s [r] ""
 
-        (ActionDelete, TargetIdent _, Nothing) ->
-          case mutateSqlParts of
+        (ActionDelete, TargetIdent (QualifiedIdentifier _ tName), Nothing) ->
+          case mutateSqlParts tName of
             Left errorResponse -> return errorResponse
             Right (sq, mq) -> do
               let stm = createWriteStatement sq mq
@@ -289,7 +289,7 @@ app dbStructure proc conf apiRequest =
       toTableInfo = map (\t ->
         let tSchema = tableSchema t
             tTable = tableName t
-            cols = filter (filterCol tSchema tTable) $ dbColumns dbStructure
+            cols = filter (filterCol tSchema tTable) allCols
             pkeys = map pkName $ filter (filterPk tSchema tTable) allPrKeys
         in (t, cols, pkeys))
       notFound = responseLBS status404 [] ""
@@ -308,15 +308,13 @@ app dbStructure proc conf apiRequest =
             status = rangeStatus lower upper (toInteger <$> tableTotal)
         in (status, contentRange)
 
+      allCols = dbColumns dbStructure
       readReq = readRequest (configMaxRows conf) (dbRelations dbStructure) proc apiRequest
       fldNames = fieldNames <$> readReq
       readDbRequest = DbRead <$> readReq
-      mutateDbRequest = DbMutate <$> (mutateRequest apiRequest =<< fldNames)
       selectQuery = requestToQuery schema False <$> readDbRequest
-      mutateQuery = requestToQuery schema False <$> mutateDbRequest
-      countQuery = requestToCountQuery schema <$> readDbRequest
-      readSqlParts = (,) <$> selectQuery <*> countQuery
-      mutateSqlParts = (,) <$> selectQuery <*> mutateQuery
+      readSqlParts = (,) <$> selectQuery <*> (requestToCountQuery schema <$> readDbRequest)
+      mutateSqlParts table = (,) <$> selectQuery <*> (requestToQuery schema False <$> DbMutate <$> (mutateRequest table allCols apiRequest =<< fldNames))
 
 responseContentTypeOrError :: [ContentType] -> Action -> Either Response ContentType
 responseContentTypeOrError accepts action = serves contentTypesForRequest accepts

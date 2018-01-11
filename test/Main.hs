@@ -48,15 +48,17 @@ main = do
 
   refDbStructure <- newIORef $ Just dbStructure
 
-  let withApp              = return $ postgrest (testCfg testDbConn)            refDbStructure pool $ pure ()
-      ltdApp               = return $ postgrest (testLtdRowsCfg testDbConn)     refDbStructure pool $ pure ()
-      unicodeApp           = return $ postgrest (testUnicodeCfg testDbConn)     refDbStructure pool $ pure ()
-      proxyApp             = return $ postgrest (testProxyCfg testDbConn)       refDbStructure pool $ pure ()
-      noJwtApp             = return $ postgrest (testCfgNoJWT testDbConn)       refDbStructure pool $ pure ()
-      binaryJwtApp         = return $ postgrest (testCfgBinaryJWT testDbConn)   refDbStructure pool $ pure ()
-      audJwtApp            = return $ postgrest (testCfgAudienceJWT testDbConn) refDbStructure pool $ pure ()
-      asymJwkApp           = return $ postgrest (testCfgAsymJWK testDbConn)     refDbStructure pool $ pure ()
-      nonexistentSchemaApp = return $ postgrest (testNonexistentSchemaCfg testDbConn)   refDbStructure pool $ pure ()
+  refUnicodeDbStructure <- newIORef =<< Just . either (panic.show) id <$> (P.use pool $ getDbStructure "تست" =<< getPgVersion)
+
+  let withApp              = return $ postgrest (testCfg testDbConn)                  refDbStructure pool $ pure ()
+      ltdApp               = return $ postgrest (testLtdRowsCfg testDbConn)           refDbStructure pool $ pure ()
+      unicodeApp           = return $ postgrest (testUnicodeCfg testDbConn)           refUnicodeDbStructure pool $ pure ()
+      proxyApp             = return $ postgrest (testProxyCfg testDbConn)             refDbStructure pool $ pure ()
+      noJwtApp             = return $ postgrest (testCfgNoJWT testDbConn)             refDbStructure pool $ pure ()
+      binaryJwtApp         = return $ postgrest (testCfgBinaryJWT testDbConn)         refDbStructure pool $ pure ()
+      audJwtApp            = return $ postgrest (testCfgAudienceJWT testDbConn)       refDbStructure pool $ pure ()
+      asymJwkApp           = return $ postgrest (testCfgAsymJWK testDbConn)           refDbStructure pool $ pure ()
+      nonexistentSchemaApp = return $ postgrest (testNonexistentSchemaCfg testDbConn) refDbStructure pool $ pure ()
 
   let reset = resetDb testDbConn
       actualPgVersion = pgVersion dbStructure

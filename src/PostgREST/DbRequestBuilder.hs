@@ -302,21 +302,17 @@ toSourceRelation mt r@(Relation t _ ft _ _ rt _ _)
   | Just mt == (tableName <$> rt) = Just $ r {relLTable=(\tbl -> tbl {tableName=sourceCTEName}) <$> rt}
   | otherwise = Nothing
 
-mutateRequest :: ApiRequest -> [FieldName] -> Either Response MutateRequest
-mutateRequest apiRequest fldNames = mapLeft apiRequestError $
+mutateRequest :: TableName -> [Column] -> ApiRequest -> [FieldName] -> Either Response MutateRequest
+mutateRequest tName allCols apiRequest fldNames = mapLeft apiRequestError $
   case action of
-    ActionCreate -> Right $ Insert rootTableName payload returnings
-    ActionUpdate -> Update rootTableName <$> pure payload <*> combinedLogic <*> pure returnings
-    ActionDelete -> Delete rootTableName <$> combinedLogic <*> pure returnings
+    ActionCreate -> Right $ Insert tName cols payload returnings
+    ActionUpdate -> Update tName <$> pure payload <*> combinedLogic <*> pure returnings
+    ActionDelete -> Delete tName <$> combinedLogic <*> pure returnings
     _        -> Left UnsupportedVerb
   where
     action = iAction apiRequest
+    cols = filter (\c -> tableName (colTable c) == tName) allCols
     payload = fromJust $ iPayload apiRequest
-    rootTableName = -- TODO: Make it safe
-      let target = iTarget apiRequest in
-      case target of
-        (TargetIdent (QualifiedIdentifier _ t) ) -> t
-        _ -> undefined
     returnings = if iPreferRepresentation apiRequest == None then [] else fldNames
     filters = map snd <$> mapM pRequestFilter mutateFilters
     logic = map snd <$> mapM pRequestLogicTree logicFilters

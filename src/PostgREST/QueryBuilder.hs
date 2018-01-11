@@ -275,24 +275,23 @@ requestToQuery schema isParent (DbRead (Node (Select colSelects tbls logicForest
     --getQueryParts is not total but requestToQuery is called only after addJoinConditions which ensures the only
     --posible relations are Child Parent Many
     getQueryParts _ _ = undefined
-requestToQuery schema _ (DbMutate (Insert mainTbl p@(PayloadJSON _ pType keys) returnings)) =
+requestToQuery schema _ (DbMutate (Insert mainTbl cls _ returnings)) =
   unwords [
-    ("WITH " <> ignoredBody) `emptyOnFalse` not payloadIsEmpty,
-    "INSERT INTO ", fromQi qi, if payloadIsEmpty then " " else "(" <> cols <> ") ",
-    case (pType, payloadIsEmpty) of
-      (PJArray _, True) -> "SELECT null WHERE false"
-      (PJObject, True)  -> "DEFAULT VALUES"
-      _ -> unwords [
-        "SELECT " <> cols <> " FROM ",
-        case pType of
-          PJObject  -> "json_populate_record"
-          PJArray _ -> "json_populate_recordset", "(null::", fromQi qi, ", $1) "],
+    "WITH pre_body AS( SELECT $1::json as payload),",
+    "body AS(",
+      "SELECT json_array_elements(payload) AS payload FROM pre_body WHERE json_typeof(payload) = 'array'",
+      "UNION ALL",
+      "SELECT payload AS payload FROM pre_body WHERE json_typeof(payload) = 'object'",
+    ")",
+    "INSERT INTO " <> fromQi qi,
+    "SELECT",
+    intercalate ", " ((\c -> "CASE json_typeof(payload->" <> fmtCol c <> ") IS NULL WHEN TRUE THEN " <> fromMaybe "NULL" (colDefault c) <> " ELSE (payload->>" <> fmtCol c <> ")::" <> colType c <> " END") <$> cls),
+    "FROM body",
     ("RETURNING " <> intercalate ", " (map (pgFmtColumn qi) returnings)) `emptyOnFalse` null returnings
     ]
   where
     qi = QualifiedIdentifier schema mainTbl
-    cols = intercalate ", " $ pgFmtIdent <$> S.toList keys
-    payloadIsEmpty = pjIsEmpty p
+    fmtCol = pgFmtLit . colName
 requestToQuery schema _ (DbMutate (Update mainTbl p@(PayloadJSON _ pType keys) logicForest returnings)) =
   if pjIsEmpty p
     then "WITH " <> ignoredBody <> "SELECT ''"
