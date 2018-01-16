@@ -92,6 +92,8 @@ decodePks :: [Table] -> HD.Result [PrimaryKey]
 decodePks tables =
   mapMaybe (pkFromRow tables) <$> HD.rowsList pkRow
  where
+  pkFromRow :: [Table] -> (Schema, Text, Text) -> Maybe PrimaryKey
+  pkFromRow tabs (s, t, n) = PrimaryKey <$> find (\tbl -> tableSchema tbl == s && tableName tbl == t) tabs <*> pure n
   pkRow = (,,) <$> HD.value HD.text <*> HD.value HD.text <*> HD.value HD.text
 
 decodeSynonyms :: [Column] -> HD.Result [(Column,Column)]
@@ -655,10 +657,6 @@ allPrimaryKeys tabs =
         kc.table_schema = tc.table_schema AND
         kc.constraint_name = tc.constraint_name AND
         kc.table_schema NOT IN ('pg_catalog', 'information_schema') |]
-
-pkFromRow :: [Table] -> (Schema, Text, Text) -> Maybe PrimaryKey
-pkFromRow tabs (s, t, n) = PrimaryKey <$> table <*> pure n
-  where table = find (\tbl -> tableSchema tbl == s && tableName tbl == t) tabs
 
 allSynonyms :: [Column] -> H.Query () [(Column,Column)]
 allSynonyms cols =

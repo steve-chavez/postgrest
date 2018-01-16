@@ -1352,3 +1352,17 @@ create table test.leak(
 );
 
 CREATE FUNCTION test.leak(blob bytea) RETURNS void AS $$ BEGIN END; $$ LANGUAGE plpgsql;
+
+create table test.employees(
+  first_name text,
+  last_name text,
+  salary money,
+  company text,
+  occupation text,
+  primary key(first_name, last_name)
+);
+
+create table test.programming_languages(
+  name text primary key,
+  rank smallint
+);

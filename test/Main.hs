@@ -6,7 +6,7 @@ import SpecHelper
 import qualified Hasql.Pool as P
 
 import PostgREST.App (postgrest)
-import PostgREST.Config (pgVersion96)
+import PostgREST.Config (pgVersion95, pgVersion96)
 import PostgREST.DbStructure (getDbStructure, getPgVersion)
 import PostgREST.Types (DbStructure(..))
 import Data.Function (id)
@@ -32,6 +32,7 @@ import qualified Feature.AndOrParamsSpec
 import qualified Feature.RpcSpec
 import qualified Feature.NonexistentSchemaSpec
 import qualified Feature.PgVersion96Spec
+import qualified Feature.UpsertSpec
 
 import Protolude
 
@@ -60,7 +61,9 @@ main = do
 
   let reset = resetDb testDbConn
       actualPgVersion = pgVersion dbStructure
-      pg96spec | actualPgVersion >= pgVersion96 = [("Feature.PgVersion96Spec"  , Feature.PgVersion96Spec.spec)]
+      upsertSpec | actualPgVersion >= pgVersion95 = [("Feature.UpsertSpec", Feature.UpsertSpec.spec)]
+                 | otherwise = []
+      pg96spec | actualPgVersion >= pgVersion96 = [("Feature.PgVersion96Spec", Feature.PgVersion96Spec.spec)]
                | otherwise = []
 
       specs = uncurry describe <$> [
@@ -76,7 +79,7 @@ main = do
         , ("Feature.StructureSpec"          , Feature.StructureSpec.spec)
         , ("Feature.AndOrParamsSpec"        , Feature.AndOrParamsSpec.spec)
         , ("Feature.NonexistentSchemaSpec"  , Feature.NonexistentSchemaSpec.spec)
-        ] ++ pg96spec
+        ] ++ pg96spec ++ upsertSpec
 
   hspec $ do
     mapM_ (beforeAll_ reset . before withApp) specs
