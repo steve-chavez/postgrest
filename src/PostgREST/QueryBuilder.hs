@@ -275,7 +275,7 @@ requestToQuery schema isParent (DbRead (Node (Select colSelects tbls logicForest
     --getQueryParts is not total but requestToQuery is called only after addJoinConditions which ensures the only
     --posible relations are Child Parent Many
     getQueryParts _ _ = undefined
-requestToQuery schema _ (DbMutate (Insert mainTbl p@(PayloadJSON _ pType keys) _pkCols _onConflict returnings)) =
+requestToQuery schema _ (DbMutate (Insert mainTbl p@(PayloadJSON _ pType keys) _pkCols _onConflict logicForest returnings)) =
   unwords [
     ("WITH " <> ignoredBody) `emptyOnFalse` not payloadIsEmpty,
     "INSERT INTO ", fromQi qi, if payloadIsEmpty then " " else "(" <> cols <> ") ",
@@ -288,16 +288,18 @@ requestToQuery schema _ (DbMutate (Insert mainTbl p@(PayloadJSON _ pType keys) _
           PJObject  -> "json_populate_record"
           PJArray _ -> "json_populate_recordset", "(null::", fromQi qi, ", $1)"],
     case _onConflict of
-      Just IgnoreDuplicates  -> "ON CONFLICT(" <> intercalate ", " _pkCols <> ") DO NOTHING "
-      Just MergeDuplicates -> "ON CONFLICT(" <> intercalate ", " _pkCols <> ") DO UPDATE SET " <>
-                               intercalate ", " (pgFmtIdent <> const " = EXCLUDED." <> pgFmtIdent <$> S.toList (keys `S.difference` S.fromList _pkCols))
-
+      Just IgnoreDuplicates -> "ON CONFLICT(" <> conflictTargetCols <> ") DO NOTHING "
+      Just MergeDuplicates  -> unwords [
+        "ON CONFLICT(" <> conflictTargetCols <> ")",
+        "DO UPDATE SET " <> intercalate ", " (pgFmtIdent <> const " = EXCLUDED." <> pgFmtIdent <$> S.toList (keys `S.difference` S.fromList _pkCols)),
+        ("WHERE " <> intercalate " AND " (map (pgFmtLogicTree qi) logicForest)) `emptyOnFalse` null logicForest]
       Nothing -> "",
     ("RETURNING " <> intercalate ", " (map (pgFmtColumn qi) returnings)) `emptyOnFalse` null returnings
     ]
   where
     qi = QualifiedIdentifier schema mainTbl
     cols = intercalate ", " $ pgFmtIdent <$> S.toList keys
+    conflictTargetCols = intercalate ", " _pkCols
     payloadIsEmpty = pjIsEmpty p
 requestToQuery schema _ (DbMutate (Update mainTbl p@(PayloadJSON _ pType keys) logicForest returnings)) =
   if pjIsEmpty p

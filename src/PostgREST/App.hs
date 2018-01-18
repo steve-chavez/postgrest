@@ -205,6 +205,32 @@ app dbStructure proc conf apiRequest =
                     then responseLBS s [toHeader contentType, r] (toS body)
                     else responseLBS s [r] ""
 
+        (ActionUpsert, TargetIdent (QualifiedIdentifier tSchema table), Just (PayloadJSON payload pType payloadKeys)) ->
+          case mutateSqlParts of
+            Left errorResponse -> return errorResponse
+            Right (sq, mq) -> do
+              let isSingle = case pType of
+                               PJArray len -> len == 1
+                               PJObject -> True
+                  colNames = colName <$> filter (filterCol tSchema table) allColumns
+              if S.fromList colNames /= payloadKeys
+                then return $ simpleError status405 [] "You must specify all columns in a PUT request"
+              else if not isSingle
+                then return $ simpleError status405 [] "PUT payload must contain a single record"
+              else do
+                row <- H.query (toS payload) $
+                       createWriteStatement sq mq (contentType == CTSingularJSON) isSingle
+                                            (contentType == CTTextCSV) (iPreferRepresentation apiRequest) []
+                let (_, queryTotal, _, body) = extractQueryResult row
+                if queryTotal /= 1
+                  then do
+                    HT.condemn
+                    return $ simpleError status405 [] "PUT must affect a single resource"
+                  else
+                    return $ if iPreferRepresentation apiRequest == Full
+                      then responseLBS status200 [toHeader contentType] (toS body)
+                      else responseLBS status204 [] ""
+
         (ActionDelete, TargetIdent _, Nothing) ->
           case mutateSqlParts of
             Left errorResponse -> return errorResponse
@@ -289,7 +315,7 @@ app dbStructure proc conf apiRequest =
       toTableInfo = map (\t ->
         let tSchema = tableSchema t
             tTable = tableName t
-            cols = filter (filterCol tSchema tTable) $ dbColumns dbStructure
+            cols = filter (filterCol tSchema tTable) allColumns
             pkeys = map pkName $ filter (filterPk tSchema tTable) allPrKeys
         in (t, cols, pkeys))
       notFound = responseLBS status404 [] ""
@@ -297,6 +323,7 @@ app dbStructure proc conf apiRequest =
       filterCol :: Schema -> TableName -> Column -> Bool
       filterCol sc tb Column{colTable=Table{tableSchema=s, tableName=t}} = s==sc && t==tb
       allPrKeys = dbPrimaryKeys dbStructure
+      allColumns = dbColumns dbStructure
       allOrigins = ("Access-Control-Allow-Origin", "*") :: Header
       shouldCount = iPreferCount apiRequest
       schema = toS $ configSchema conf
@@ -325,6 +352,7 @@ responseContentTypeOrError accepts action = serves contentTypesForRequest accept
       case action of
         ActionRead ->    [CTApplicationJSON, CTSingularJSON, CTTextCSV, CTOctetStream]
         ActionCreate ->  [CTApplicationJSON, CTSingularJSON, CTTextCSV]
+        ActionUpsert ->  [CTApplicationJSON, CTSingularJSON, CTTextCSV]
         ActionUpdate ->  [CTApplicationJSON, CTSingularJSON, CTTextCSV]
         ActionDelete ->  [CTApplicationJSON, CTSingularJSON, CTTextCSV]
         ActionInvoke _ ->  [CTApplicationJSON, CTSingularJSON, CTTextCSV, CTOctetStream]
