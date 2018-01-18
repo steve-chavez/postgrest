@@ -213,19 +213,21 @@ app dbStructure proc conf apiRequest =
                                PJArray len -> len == 1
                                PJObject -> True
                   colNames = colName <$> filter (filterCol tSchema table) allColumns
-              if S.fromList colNames /= payloadKeys
-                then return $ simpleError status405 [] "You must specify all columns in a PUT request"
+              if topLevelRange /= allRange
+                then return $ simpleError status400 [] "limit/offset querystring parameters and Range header are not allowed for PUT"
+              else if S.fromList colNames /= payloadKeys
+                then return $ simpleError status405 [] "You must specify all columns when using PUT"
               else if not isSingle
-                then return $ simpleError status405 [] "PUT payload must contain a single record"
+                then return $ simpleError status405 [] "PUT payload must contain a single row"
               else do
                 row <- H.query (toS payload) $
-                       createWriteStatement sq mq (contentType == CTSingularJSON) isSingle
+                       createWriteStatement sq mq (contentType == CTSingularJSON) False
                                             (contentType == CTTextCSV) (iPreferRepresentation apiRequest) []
                 let (_, queryTotal, _, body) = extractQueryResult row
                 if queryTotal /= 1
                   then do
                     HT.condemn
-                    return $ simpleError status405 [] "PUT must affect a single resource"
+                    return $ simpleError status405 [] "The URI must univocally identify the payload when using PUT"
                   else
                     return $ if iPreferRepresentation apiRequest == Full
                       then responseLBS status200 [toHeader contentType] (toS body)

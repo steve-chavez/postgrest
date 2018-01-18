@@ -305,9 +305,9 @@ toSourceRelation mt r@(Relation t _ ft _ _ rt _ _)
 mutateRequest :: ApiRequest -> [PrimaryKey] -> [FieldName] -> Either Response MutateRequest
 mutateRequest apiRequest pks fldNames = mapLeft apiRequestError $
   case action of
-    ActionCreate -> Right $ Insert rootTableName payload pkCols_ (iPreferResolution apiRequest) [] returnings
+    ActionCreate -> Right $ Insert rootTableName payload pkCols_ (iPreferResolution apiRequest) returnings
     ActionUpdate -> Update rootTableName payload <$> combinedLogic <*> pure returnings
-    ActionUpsert -> Insert rootTableName payload pkCols_ (Just MergeDuplicates) <$> combinedLogic <*> pure returnings
+    ActionUpsert -> SingleUpsert rootTableName payload pkCols_ <$> combinedLogic <*> pure returnings
     ActionDelete -> Delete rootTableName <$> combinedLogic <*> pure returnings
     _            -> Left UnsupportedVerb
   where
