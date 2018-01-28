@@ -30,7 +30,7 @@ import qualified Hasql.Decoders          as HD
 import qualified Data.Aeson              as JSON
 
 import           PostgREST.Config        (pgVersion96)
-import           PostgREST.RangeQuery    (NonnegRange, rangeLimit, rangeOffset, allRange)
+import           PostgREST.RangeQuery    (rangeLimit, rangeOffset, allRange)
 import qualified Data.HashMap.Strict     as HM
 import           Data.Maybe
 import qualified Data.Set                as S
@@ -222,31 +222,20 @@ requestToCountQuery schema (DbRead (Node (Select _ _ logicForest _ _, (mainTbl, 
    filteredLogic = filter nonFKRoot logicForest
 
 requestToQuery :: Schema -> Bool -> DbRequest -> SqlQuery
-requestToQuery schema isParent (DbRead (Node (Select colSelects tbls logicForest ord range, (nodeName, maybeRelation, _, _)) forest)) =
+requestToQuery schema isParent (DbRead (Node (Select colSelects tbls logicForest ordts range, (nodeName, maybeRelation, _, _)) forest)) =
   query
   where
     mainTbl = fromMaybe nodeName (tableName . relTable <$> maybeRelation)
     qi = removeSourceCTESchema schema mainTbl
     toQi = removeSourceCTESchema schema
     query = unwords [
-      "SELECT ", intercalate ", " (map (pgFmtSelectItem qi) colSelects ++ selects),
-      "FROM ", intercalate ", " (map (fromQi . toQi) tbls),
+      "SELECT " <> intercalate ", " (map (pgFmtSelectItem qi) colSelects ++ selects),
+      "FROM " <> intercalate ", " (map (fromQi . toQi) tbls),
       unwords joins,
       ("WHERE " <> intercalate " AND " (map (pgFmtLogicTree qi) logicForest)) `emptyOnFalse` null logicForest,
-      orderF (fromMaybe [] ord),
-      if isParent then "" else limitF range
-      ]
-    orderF ts =
-        if null ts
-            then ""
-            else "ORDER BY " <> clause
-        where
-            clause = intercalate "," (map queryTerm ts)
-            queryTerm :: OrderTerm -> Text
-            queryTerm t = " "
-                <> toS (pgFmtField qi $ otTerm t) <> " "
-                <> maybe "" show (otDirection t) <> " "
-                <> maybe "" show (otNullOrder t) <> " "
+      ("ORDER BY " <> intercalate ", " (map (pgFmtOrderTerm qi) ordts)) `emptyOnFalse` null ordts,
+      ("LIMIT " <> (maybe "ALL" show $ rangeLimit range) <> " OFFSET " <> (show $ rangeOffset range)) `emptyOnFalse` (isParent || range == allRange) ]
+
     (joins, selects) = foldr getQueryParts ([],[]) forest
 
     getQueryParts :: Tree ReadNode -> ([SqlFragment], [SqlFragment]) -> ([SqlFragment], [SqlFragment])
@@ -372,14 +361,6 @@ locationF pKeys =
       else " WHERE json_data.key IN ('" <> intercalate "','" pKeys <> "')"
     ) <> ")"
 
-limitF :: NonnegRange -> SqlFragment
-limitF r  = if r == allRange
-  then ""
-  else "LIMIT " <> limit <> " OFFSET " <> offset
-  where
-    limit  = maybe "ALL" show $ rangeLimit r
-    offset = show $ rangeOffset r
-
 fromQi :: QualifiedIdentifier -> SqlFragment
 fromQi t = (if s == "" then "" else pgFmtIdent s <> ".") <> pgFmtIdent n
   where
@@ -402,6 +383,12 @@ pgFmtField table (c, jp) = pgFmtColumn table c <> pgFmtJsonPath jp
 pgFmtSelectItem :: QualifiedIdentifier -> SelectItem -> SqlFragment
 pgFmtSelectItem table (f@(_, jp), Nothing, alias, _) = pgFmtField table f <> pgFmtAs jp alias
 pgFmtSelectItem table (f@(_, jp), Just cast, alias, _) = "CAST (" <> pgFmtField table f <> " AS " <> cast <> " )" <> pgFmtAs jp alias
+
+pgFmtOrderTerm :: QualifiedIdentifier -> OrderTerm -> SqlFragment
+pgFmtOrderTerm qi ot = unwords [
+  toS . pgFmtField qi $ otTerm ot,
+  maybe "" show $ otDirection ot,
+  maybe "" show $ otNullOrder ot]
 
 pgFmtFilter :: QualifiedIdentifier -> Filter -> SqlFragment
 pgFmtFilter table (Filter fld (OpExpr hasNot oper)) = notOp <> " " <> case oper of

@@ -252,7 +252,7 @@ addFilter :: (EmbedPath, Filter) -> ReadRequest -> ReadRequest
 addFilter = addProperty addFilterToNode
 
 addOrderToNode :: [OrderTerm] -> ReadRequest -> ReadRequest
-addOrderToNode o (Node (q,i) f) = Node (q{order=Just o}, i) f
+addOrderToNode o (Node (q,i) f) = Node (q{order=o}, i) f
 
 addOrder :: (EmbedPath, [OrderTerm]) -> ReadRequest -> ReadRequest
 addOrder = addProperty addOrderToNode

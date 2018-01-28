@@ -58,7 +58,7 @@ pReadRequest rootNodeName = do
   fieldTree <- pFieldForest
   return $ foldr treeEntry (Node (readQuery, (rootNodeName, Nothing, Nothing, Nothing)) []) fieldTree
   where
-    readQuery = Select [] [rootNodeName] [] Nothing allRange
+    readQuery = Select [] [rootNodeName] [] [] allRange
     treeEntry :: Tree SelectItem -> ReadRequest -> ReadRequest
     treeEntry (Node fld@((fn, _),_,alias,relationDetail) fldForest) (Node (q, i) rForest) =
       case fldForest of
@@ -66,7 +66,7 @@ pReadRequest rootNodeName = do
         _  -> Node (q, i) newForest
           where
             newForest =
-              foldr treeEntry (Node (Select [] [fn] [] Nothing allRange, (fn, Nothing, alias, relationDetail)) []) fldForest:rForest
+              foldr treeEntry (Node (Select [] [fn] [] [] allRange, (fn, Nothing, alias, relationDetail)) []) fldForest:rForest
 
 pTreePath :: Parser (EmbedPath, Field)
 pTreePath = do

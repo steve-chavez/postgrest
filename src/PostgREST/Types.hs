@@ -261,7 +261,7 @@ type SelectItem = (Field, Maybe Cast, Maybe Alias, Maybe RelationDetail)
 type EmbedPath = [Text]
 data Filter = Filter { field::Field, opExpr::OpExpr } deriving (Show, Eq)
 
-data ReadQuery = Select { select::[SelectItem], from::[TableName], where_::[LogicTree], order::Maybe [OrderTerm], range_::NonnegRange } deriving (Show, Eq)
+data ReadQuery = Select { select::[SelectItem], from::[TableName], where_::[LogicTree], order::[OrderTerm], range_::NonnegRange } deriving (Show, Eq)
 data MutateQuery = Insert { in_::TableName, qPayload::PayloadJSON, returning::[FieldName] }
                  | Delete { in_::TableName, where_::[LogicTree], returning::[FieldName] }
                  | Update { in_::TableName, qPayload::PayloadJSON, where_::[LogicTree], returning::[FieldName] } deriving (Show, Eq)
