@@ -130,14 +130,15 @@ data RelationType = Child | Parent | Many | Root deriving (Show, Eq)
   It has nothing to do with PostgreSQL referring to tables/views as relations.
 -}
 data Relation = Relation {
-  relTable    :: Table
-, relColumns  :: [Column]
-, relFTable   :: Table
-, relFColumns :: [Column]
-, relType     :: RelationType
-, relLTable   :: Maybe Table
-, relLCols1   :: Maybe [Column]
-, relLCols2   :: Maybe [Column]
+  relTable       :: Table
+, relColumns     :: [Column]
+, relFTable      :: Table
+, relFColumns    :: [Column]
+, relType        :: RelationType
+-- The Link attrs are used when RelationType == Many
+, relLinkTable   :: Maybe Table
+, relLinkCols1   :: Maybe [Column]
+, relLinkCols2   :: Maybe [Column]
 } deriving (Show, Eq)
 
 -- | Cached attributes of a JSON payload
@@ -201,8 +202,7 @@ ftsOperators = M.fromList [
 data OpExpr = OpExpr Bool Operation deriving (Eq, Show)
 data Operation = Op Operator SingleVal |
                  In ListVal |
-                 Fts Operator (Maybe Language) SingleVal |
-                 Join QualifiedIdentifier ForeignKey deriving (Eq, Show)
+                 Fts Operator (Maybe Language) SingleVal deriving (Eq, Show)
 type Language = Text
 
 -- | Represents a single value in a filter, e.g. id=eq.singleval
@@ -260,12 +260,14 @@ type SelectItem = (Field, Maybe Cast, Maybe Alias, Maybe RelationDetail)
 -- | Path of the embedded levels, e.g "clients.projects.name=eq.." gives Path ["clients", "projects"]
 type EmbedPath = [Text]
 data Filter = Filter { field::Field, opExpr::OpExpr } deriving (Show, Eq)
+data JoinCond = JoinCond (QualifiedIdentifier, FieldName, Level) (QualifiedIdentifier, FieldName, Level) deriving (Show, Eq)
+type Level = Integer
 
-data ReadQuery = Select { select::[SelectItem], from::[TableName], where_::[LogicTree], order::[OrderTerm], range_::NonnegRange } deriving (Show, Eq)
+data ReadQuery = Select { select::[SelectItem], from::[TableName], where_::[LogicTree], joinConds::[JoinCond], order::[OrderTerm], range_::NonnegRange } deriving (Show, Eq)
 data MutateQuery = Insert { in_::TableName, qPayload::PayloadJSON, returning::[FieldName] }
                  | Delete { in_::TableName, where_::[LogicTree], returning::[FieldName] }
                  | Update { in_::TableName, qPayload::PayloadJSON, where_::[LogicTree], returning::[FieldName] } deriving (Show, Eq)
-type ReadNode = (ReadQuery, (NodeName, Maybe Relation, Maybe Alias, Maybe RelationDetail))
+type ReadNode = (ReadQuery, (NodeName, Maybe Relation, Maybe Alias, Maybe RelationDetail, Level))
 type ReadRequest = Tree ReadNode
 type MutateRequest = MutateQuery
 data DbRequest = DbRead ReadRequest | DbMutate MutateRequest

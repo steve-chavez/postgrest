@@ -427,6 +427,31 @@ spec = do
     it "can detect fk relations through views to tables in the public schema" $
       get "/consumers_view?select=*,orders_view{*}" `shouldRespondWith` 200
 
+    context "table with self reference foreign key" $ do
+      it "embeds parents recursively" $
+        get "/family_tree?id=in.(3,4)&select=id,parent(id,name,parent(*))" `shouldRespondWith`
+          [json|[
+            { "id": "3", "parent": { "id": "1", "name": "Parental Unit", "parent": null } },
+            { "id": "4", "parent": { "id": "2", "name": "Kid One", "parent": { "id": "1", "name": "Parental Unit", "parent": null } } }
+          ]|]
+          { matchHeaders = [matchContentTypeJson] }
+
+      it "embeds childs recursively" $
+        get "/family_tree?id=eq.1&select=id,name, childs:family_tree.parent(id,name,childs:family_tree.parent(id,name))" `shouldRespondWith`
+          [json|[{
+            "id": "1", "name": "Parental Unit", "childs": [
+              { "id": "2", "name": "Kid One", "childs": [ { "id": "4", "name": "Grandkid One" } ] },
+              { "id": "3", "name": "Kid Two", "childs": [ { "id": "5", "name": "Grandkid Two" } ] }
+            ]
+          }]|] { matchHeaders = [matchContentTypeJson] }
+
+      it "embeds parent and then embeds childs" $
+        get "/family_tree?id=eq.2&select=id,name,parent(id,name,childs:family_tree.parent(id,name))" `shouldRespondWith`
+          [json|[{
+            "id": "2", "name": "Kid One", "parent": {
+              "id": "1", "name": "Parental Unit", "childs": [ { "id": "2", "name": "Kid One" }, { "id": "3", "name": "Kid Two"} ]
+            }
+          }]|] { matchHeaders = [matchContentTypeJson] }
 
   describe "ordering response" $ do
     it "by a column asc" $

@@ -1357,3 +1357,10 @@ create table test.perf_articles(
   id integer not null,
   body text not null
 );
+
+create table family_tree (
+  id text not null primary key,
+  name text not null,
+  parent text
+);
+alter table only family_tree add constraint pptr foreign key (parent) references family_tree(id);

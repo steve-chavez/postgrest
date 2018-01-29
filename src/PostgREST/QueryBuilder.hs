@@ -206,54 +206,48 @@ pgFmtLit x =
 
 requestToCountQuery :: Schema -> DbRequest -> SqlQuery
 requestToCountQuery _ (DbMutate _) = undefined
-requestToCountQuery schema (DbRead (Node (Select _ _ logicForest _ _, (mainTbl, _, _, _)) _)) =
+requestToCountQuery schema (DbRead (Node (Select _ _ logicForest _ _ _, (mainTbl, _, _, _, _)) _)) =
  unwords [
    "SELECT pg_catalog.count(*)",
    "FROM ", fromQi qi,
-    ("WHERE " <> intercalate " AND " (map (pgFmtLogicTree qi) filteredLogic)) `emptyOnFalse` null filteredLogic
+    ("WHERE " <> intercalate " AND " (map (pgFmtLogicTree qi) logicForest)) `emptyOnFalse` null logicForest
    ]
  where
    qi = removeSourceCTESchema schema mainTbl
-   -- all foreing key filters are root nodes(see addFilterToLogicForest), only those are filtered
-   nonFKRoot :: LogicTree -> Bool
-   nonFKRoot (Stmnt (Filter _ (OpExpr _ (Join _ _)))) = False
-   nonFKRoot (Stmnt _) = True
-   nonFKRoot Expr{} = True
-   filteredLogic = filter nonFKRoot logicForest
 
 requestToQuery :: Schema -> Bool -> DbRequest -> SqlQuery
-requestToQuery schema isParent (DbRead (Node (Select colSelects tbls logicForest ordts range, (nodeName, maybeRelation, _, _)) forest)) =
+requestToQuery schema isParent (DbRead (Node (Select colSelects tbls logicForest joinConds_ ordts range, (nodeName, maybeRelation, _, _, level)) forest)) =
   query
   where
     mainTbl = fromMaybe nodeName (tableName . relTable <$> maybeRelation)
-    qi = removeSourceCTESchema schema mainTbl
+    qi = QualifiedIdentifier "" (mainTbl <> "_" <> show level)
     toQi = removeSourceCTESchema schema
     query = unwords [
       "SELECT " <> intercalate ", " (map (pgFmtSelectItem qi) colSelects ++ selects),
-      "FROM " <> intercalate ", " (map (fromQi . toQi) tbls),
+      "FROM " <> intercalate ", " (map (\t -> fromQi (toQi t) <> " AS " <> pgFmtIdent (t <> "_" <> show level)) tbls),
       unwords joins,
-      ("WHERE " <> intercalate " AND " (map (pgFmtLogicTree qi) logicForest)) `emptyOnFalse` null logicForest,
+      ("WHERE " <> intercalate " AND " (map (pgFmtLogicTree qi) logicForest ++ map pgFmtJoinCond joinConds_)) `emptyOnFalse` (null logicForest && null joinConds_),
       ("ORDER BY " <> intercalate ", " (map (pgFmtOrderTerm qi) ordts)) `emptyOnFalse` null ordts,
-      ("LIMIT " <> (maybe "ALL" show $ rangeLimit range) <> " OFFSET " <> (show $ rangeOffset range)) `emptyOnFalse` (isParent || range == allRange) ]
+      ("LIMIT " <> maybe "ALL" show (rangeLimit range) <> " OFFSET " <> show (rangeOffset range)) `emptyOnFalse` (isParent || range == allRange) ]
 
     (joins, selects) = foldr getQueryParts ([],[]) forest
 
     getQueryParts :: Tree ReadNode -> ([SqlFragment], [SqlFragment]) -> ([SqlFragment], [SqlFragment])
-    getQueryParts (Node n@(_, (name, Just Relation{relType=Child,relTable=Table{tableName=table}}, alias, _)) forst) (j,s) = (j,sel:s)
+    getQueryParts (Node n@(_, (name, Just Relation{relType=Child,relTable=Table{tableName=table}}, alias, _, _)) forst) (j,s) = (j,sel:s)
       where
         sel = "COALESCE(("
            <> "SELECT json_agg(" <> pgFmtIdent table <> ".*) "
            <> "FROM (" <> subquery <> ") " <> pgFmtIdent table
            <> "), '[]') AS " <> pgFmtIdent (fromMaybe name alias)
            where subquery = requestToQuery schema False (DbRead (Node n forst))
-    getQueryParts (Node n@(_, (name, Just Relation{relType=Parent,relTable=Table{tableName=table}}, alias, _)) forst) (j,s) = (joi:j,sel:s)
+    getQueryParts (Node n@(_, (name, Just Relation{relType=Parent,relTable=Table{tableName=table}}, alias, _, _)) forst) (j,s) = (joi:j,sel:s)
       where
         aliasOrName = fromMaybe name alias
         localTableName = pgFmtIdent $ table <> "_" <> aliasOrName
         sel = "row_to_json(" <> localTableName <> ".*) AS " <> pgFmtIdent aliasOrName
         joi = " LEFT JOIN LATERAL( " <> subquery <> " ) AS " <> localTableName <> " ON TRUE "
           where subquery = requestToQuery schema True (DbRead (Node n forst))
-    getQueryParts (Node n@(_, (name, Just Relation{relType=Many,relTable=Table{tableName=table}}, alias, _)) forst) (j,s) = (j,sel:s)
+    getQueryParts (Node n@(_, (name, Just Relation{relType=Many,relTable=Table{tableName=table}}, alias, _, _)) forst) (j,s) = (j,sel:s)
       where
         sel = "COALESCE (("
            <> "SELECT json_agg(" <> pgFmtIdent table <> ".*) "
@@ -411,9 +405,6 @@ pgFmtFilter table (Filter fld (OpExpr hasNot oper)) = notOp <> " " <> case oper 
        <> maybe "" ((<> ", ") . pgFmtLit) lang
        <> unknownLiteral val
        <> ") "
-
-   Join fQi (ForeignKey Column{colTable=Table{tableName=fTableName}, colName=fColName}) ->
-     pgFmtField fQi fld <> " = " <> pgFmtColumn (removeSourceCTESchema (qiSchema fQi) fTableName) fColName
  where
    pgFmtFieldOp op = pgFmtField table fld <> " " <> sqlOperator op
    sqlOperator o = HM.lookupDefault "=" o operators
@@ -424,6 +415,12 @@ pgFmtFilter table (Filter fld (OpExpr hasNot oper)) = notOp <> " " <> case oper 
    whiteList v = fromMaybe
      (toS (pgFmtLit v) <> "::unknown ")
      (find ((==) . toLower $ v) ["null","true","false"])
+
+pgFmtJoinCond :: JoinCond -> SqlFragment
+pgFmtJoinCond (JoinCond (qi, cName, lvl) (fQi, fcName, fLvl)) =
+  let qiAlias = QualifiedIdentifier "" (qiName qi <> "_" <> show lvl)
+      fQiAlias = QualifiedIdentifier "" (qiName fQi <> "_" <> show fLvl) in
+  pgFmtColumn qiAlias cName <> " = " <> pgFmtColumn fQiAlias fcName
 
 pgFmtLogicTree :: QualifiedIdentifier -> LogicTree -> SqlFragment
 pgFmtLogicTree qi (Expr hasNot op forest) = notOp <> " (" <> intercalate (" " <> show op <> " ") (pgFmtLogicTree qi <$> forest) <> ")"

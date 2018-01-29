@@ -334,6 +334,10 @@ INSERT INTO part VALUES (1), (2), (3), (4);
 
 TRUNCATE TABLE being_part CASCADE;
 INSERT INTO being_part VALUES (1,1), (2,1), (3,2), (4,3);
---
--- PostgreSQL database dump complete
---
+
+TRUNCATE TABLE family_tree CASCADE;
+INSERT INTO family_tree VALUES ('1', 'Parental Unit', NULL);
+INSERT INTO family_tree VALUES ('2', 'Kid One', '1');
+INSERT INTO family_tree VALUES ('3', 'Kid Two', '1');
+INSERT INTO family_tree VALUES ('4', 'Grandkid One', '2');
+INSERT INTO family_tree VALUES ('5', 'Grandkid Two', '3');

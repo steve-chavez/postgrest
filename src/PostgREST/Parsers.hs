@@ -53,20 +53,21 @@ ws = toS <$> many (oneOf " \t")
 lexeme :: Parser a -> Parser a
 lexeme p = ws *> p <* ws
 
+-- Build tree with a Level attribute so when an embed occurs and the parent node has the same name as the child we have a way to differentiate them
+-- Check issue #987
 pReadRequest :: Text -> Parser ReadRequest
 pReadRequest rootNodeName = do
+  let rootLvl = 1
   fieldTree <- pFieldForest
-  return $ foldr treeEntry (Node (readQuery, (rootNodeName, Nothing, Nothing, Nothing)) []) fieldTree
+  return $ foldr (treeEntry rootLvl) (Node (Select [] [rootNodeName] [] [] [] allRange, (rootNodeName, Nothing, Nothing, Nothing, rootLvl)) []) fieldTree
   where
-    readQuery = Select [] [rootNodeName] [] [] allRange
-    treeEntry :: Tree SelectItem -> ReadRequest -> ReadRequest
-    treeEntry (Node fld@((fn, _),_,alias,relationDetail) fldForest) (Node (q, i) rForest) =
+    treeEntry :: Integer -> Tree SelectItem -> ReadRequest -> ReadRequest
+    treeEntry lvl (Node fld@((fn, _),_,alias,relationDetail) fldForest) (Node (q, i) rForest) =
+      let nxtLvl = succ lvl in
       case fldForest of
         [] -> Node (q {select=fld:select q}, i) rForest
-        _  -> Node (q, i) newForest
-          where
-            newForest =
-              foldr treeEntry (Node (Select [] [fn] [] [] allRange, (fn, Nothing, alias, relationDetail)) []) fldForest:rForest
+        _  -> Node (q, i) $
+              foldr (treeEntry nxtLvl) (Node (Select [] [fn] [] [] [] allRange, (fn, Nothing, alias, relationDetail, nxtLvl)) []) fldForest:rForest
 
 pTreePath :: Parser (EmbedPath, Field)
 pTreePath = do
