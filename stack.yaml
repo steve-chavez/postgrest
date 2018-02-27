@@ -9,6 +9,8 @@ extra-deps:
   - hasql-1.1
   - hasql-pool-0.4.3
   - hasql-transaction-0.5.2
+  - git: git@github.com:frasertweedale/hs-jose
+    commit: 62d642bee388e93c0c2256e32fa63b33468187db
 ghc-options:
   postgrest: -O2 -Werror -Wall -fwarn-identities -fno-warn-redundant-constraints
 nix:
