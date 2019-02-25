@@ -26,7 +26,12 @@ API than you are likely to write from scratch.
         </a>
       </td>
       <td align="center" valign="middle">
-        <a href="https://patreon.com/postgrest" target="_blank">
+        <a href="https://timescale.com" target="_blank">
+          <img width="222px" src="static/timescaledb.png">
+        </a>
+      </td>
+      <td align="center" valign="middle">
+        <a href="https://timescale.com" target="_blank">
           <img width="222px" src="https://opencollective.com/static/images/become_sponsor.svg">
         </a>
       </td>
