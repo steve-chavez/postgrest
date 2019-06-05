@@ -18,8 +18,7 @@ build_task:
   test_script:
     - stack --version
   build_script:
-    - stack --verbose setup
-    - stack build -j1 --copy-bins --local-bin-path .
+    - stack build --verbose --install-ghc --copy-bins --local-bin-path .
   stack_cache:
     folder: "~/.stack"
     fingerprint_script:
