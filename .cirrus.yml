@@ -3,9 +3,10 @@ freebsd_instance:
 
 build_task:
   install_script:
-    - pkg install -y coreutils
     ## gmake required, otherwise bsd make is used and some cryptic "No operator" errors are shown
+    - pkg install -y gmake
     ## gcc required, otherwise warning: macro expansion producing 'defined' has undefined behavior [-Wexpansion-to-defined]
+    - pkg install -y gcc
     - pkg install -y libiconv
     - pkg install -y gmp
     - pkg install -y postgresql95-client
