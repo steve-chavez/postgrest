@@ -6,8 +6,10 @@ build_task:
     - ls /
     - uname -a
     - whereis make
+    - whereis gmake
     - whereis gcc
   install_script:
+    - pkg install -y gmake
     - pkg install -y libiconv
     - pkg install -y postgresql95-client
     - pkg install -y pkgconf
