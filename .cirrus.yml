@@ -1,13 +1,24 @@
 freebsd_instance:
   image: freebsd-11-2-release-amd64
 
-task:
+build_task:
   check_script:
     - ls /
     - uname -a
   install_script:
     - pkg install -y libiconv
+    - pkg install -y postgresql95-client
     - curl -L https://github.com/commercialhaskell/stack/releases/download/v1.9.3/stack-1.9.3-freebsd-x86_64.tar.gz | tar zxf - -C /tmp
     - sudo mv /tmp/stack-1.9.3-freebsd-x86_64/stack /usr/bin
   test_script:
     - stack --version
+  build_script:
+    - stack setup
+    - stack build -j1 --copy-bins --local-bin-path .
+  stack_cache:
+    folder:
+      - ~/.stack
+      - .stack-work
+    fingerprint_script:
+      - cat stack.yaml
+      - cat postgrest.cabal
