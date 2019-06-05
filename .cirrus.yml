@@ -1,0 +1,50 @@
+freebsd_instance:
+  image: freebsd-11-1-release-amd64
+
+build_task:
+  only_if: $CIRRUS_BRANCH == 'master'
+  env:
+    TOKEN: test
+    NAME: postgrest-$TOKEN-freebsd.tar.xz
+  install_script:
+    - echo $NAME
+    ## gmake required, otherwise bsd make is used and some cryptic "No operator" errors are shown
+    - pkg install -y gmake
+    ## gcc required, otherwise warning: macro expansion producing 'defined' has undefined behavior [-Wexpansion-to-defined]
+    - pkg install -y gcc
+    - pkg install -y libiconv
+    - pkg install -y gmp
+    - pkg install -y postgresql95-client
+    - pkg install -y pkgconf
+    - curl -L https://github.com/commercialhaskell/stack/releases/download/v1.7.1/stack-1.7.1-freebsd-x86_64.tar.gz | tar zxf - -C /tmp
+    - sudo mv /tmp/stack-1.7.1-freebsd-x86_64/stack /usr/bin
+  test_script:
+    - stack --version
+    - whereis gmake
+    - whereis gcc
+  build_script:
+    - stack build --verbose --install-ghc --copy-bins --local-bin-path .
+  stack_cache:
+    folder: "~/.stack"
+    fingerprint_script:
+      - cat stack.yaml
+      - cat postgrest.cabal
+  stack_work_cache:
+    folder: ".stack-work"
+    fingerprint_script:
+      - cat stack.yaml
+      - cat postgrest.cabal
+
+publish_task:
+  skip: $CIRRUS_BRANCH !=~ 'release/.*'
+  env:
+    TOKEN: ENCRYPTED[f2897e57b7db23c9e8386774891e9aec4241131fa0bf5803cd39d69ab84c6815ac87deacf4b65223dbab40a87c2f7493]
+    NAME: postgrest-$CIRRUS_TAG-freebsd.tar.xz
+  depends_on:
+    - build
+  script:
+    - tar cjf $NAME postgrest
+    - curl -X POST --data-binary $NAME \
+      -H "Authorization:token ${TOKEN}"\
+      -H "Content-Type:application/octet-stream"\
+      "https://uploads.github.com/repos/steve-chavez/postgrest/releases/${CIRRUS_RELEASE}/assets?name=${NAME}"
