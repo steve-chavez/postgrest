@@ -7,7 +7,7 @@ build_task:
     - whereis gmake
     - whereis gcc
   install_script:
-    - pkg install -y coreutils
+    ## gmake is necessary, otherwise bsd make is used and some cryptic "No operator" errors are shown
     - pkg install -y gmake
     - pkg install -y libiconv
     - pkg install -y gmp
