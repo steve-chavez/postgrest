@@ -1,0 +1,12 @@
+freebsd_instance:
+  image: freebsd-11-2-release-amd64
+
+task:
+  check_script:
+    - ls /
+    - uname -a
+  install_script:
+    - curl -L https://github.com/commercialhaskell/stack/releases/download/v1.9.3/stack-1.9.3-freebsd-x86_64.tar.gz | tar zx -C /tmp
+    - sudo mv /tmp/stack-1.9.3-freebsd-x86_64/stack /usr/bin
+  test_script:
+    - stack --version
