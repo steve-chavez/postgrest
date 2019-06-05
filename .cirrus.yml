@@ -6,6 +6,7 @@ task:
     - ls /
     - uname -a
   install_script:
+    - pkg install -y libiconv
     - curl -L https://github.com/commercialhaskell/stack/releases/download/v1.9.3/stack-1.9.3-freebsd-x86_64.tar.gz | tar zxf - -C /tmp
     - sudo mv /tmp/stack-1.9.3-freebsd-x86_64/stack /usr/bin
   test_script:
