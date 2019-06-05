@@ -9,8 +9,8 @@ build_task:
     - whereis gmake
     - whereis gcc
   install_script:
-    - pkg install -y gmake
     - pkg install -y libiconv
+    - pkg install -y gmp
     - pkg install -y postgresql95-client
     - pkg install -y pkgconf
     - curl -L https://github.com/commercialhaskell/stack/releases/download/v1.7.1/stack-1.7.1-freebsd-x86_64.tar.gz | tar zxf - -C /tmp
