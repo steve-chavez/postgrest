@@ -1,5 +1,5 @@
 freebsd_instance:
-  image: freebsd-11-2-release-amd64
+  image: freebsd-11-1-release-amd64
 
 build_task:
   check_script:
@@ -13,8 +13,8 @@ build_task:
     - pkg install -y libiconv
     - pkg install -y postgresql95-client
     - pkg install -y pkgconf
-    - curl -L https://github.com/commercialhaskell/stack/releases/download/v1.9.3/stack-1.9.3-freebsd-x86_64.tar.gz | tar zxf - -C /tmp
-    - sudo mv /tmp/stack-1.9.3-freebsd-x86_64/stack /usr/bin
+    - curl -L https://github.com/commercialhaskell/stack/releases/download/v1.7.1/stack-1.7.1-freebsd-x86_64.tar.gz | tar zxf - -C /tmp
+    - sudo mv /tmp/stack-1.7.1-freebsd-x86_64/stack /usr/bin
   test_script:
     - stack --version
   build_script:
