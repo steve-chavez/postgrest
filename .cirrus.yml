@@ -5,15 +5,18 @@ build_task:
   check_script:
     - ls /
     - uname -a
+    - whereis make
+    - whereis gcc
   install_script:
     - pkg install -y libiconv
     - pkg install -y postgresql95-client
+    - pkg install -y pkgconf
     - curl -L https://github.com/commercialhaskell/stack/releases/download/v1.9.3/stack-1.9.3-freebsd-x86_64.tar.gz | tar zxf - -C /tmp
     - sudo mv /tmp/stack-1.9.3-freebsd-x86_64/stack /usr/bin
   test_script:
     - stack --version
   build_script:
-    - stack setup
+    - stack --verbose setup
     - stack build -j1 --copy-bins --local-bin-path .
   stack_cache:
     folder: "~/.stack"
