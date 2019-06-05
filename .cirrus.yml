@@ -16,9 +16,12 @@ build_task:
     - stack setup
     - stack build -j1 --copy-bins --local-bin-path .
   stack_cache:
-    folder:
-      - ~/.stack
-      - .stack-work
+    folder: "~/.stack"
+    fingerprint_script:
+      - cat stack.yaml
+      - cat postgrest.cabal
+  stack_work_cache:
+    folder: ".stack-work"
     fingerprint_script:
       - cat stack.yaml
       - cat postgrest.cabal
