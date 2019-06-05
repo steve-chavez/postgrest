@@ -2,13 +2,10 @@ freebsd_instance:
   image: freebsd-11-1-release-amd64
 
 build_task:
-  check_script:
-    - whereis make
-    - whereis gmake
-    - whereis gcc
   install_script:
-    ## gmake is necessary, otherwise bsd make is used and some cryptic "No operator" errors are shown
-    - pkg install -y gmake
+    - pkg install -y coreutils
+    ## gmake required, otherwise bsd make is used and some cryptic "No operator" errors are shown
+    ## gcc required, otherwise warning: macro expansion producing 'defined' has undefined behavior [-Wexpansion-to-defined]
     - pkg install -y libiconv
     - pkg install -y gmp
     - pkg install -y postgresql95-client
@@ -17,6 +14,8 @@ build_task:
     - sudo mv /tmp/stack-1.7.1-freebsd-x86_64/stack /usr/bin
   test_script:
     - stack --version
+    - whereis gmake
+    - whereis gcc
   build_script:
     - stack build --verbose --install-ghc --copy-bins --local-bin-path .
   stack_cache:
