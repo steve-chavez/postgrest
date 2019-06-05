@@ -3,8 +3,6 @@ freebsd_instance:
 
 build_task:
   check_script:
-    - ls /
-    - uname -a
     - whereis make
     - whereis gmake
     - whereis gcc
@@ -16,7 +14,6 @@ build_task:
     - pkg install -y pkgconf
     - curl -L https://github.com/commercialhaskell/stack/releases/download/v1.7.1/stack-1.7.1-freebsd-x86_64.tar.gz | tar zxf - -C /tmp
     - sudo mv /tmp/stack-1.7.1-freebsd-x86_64/stack /usr/bin
-    - s
   test_script:
     - stack --version
   build_script:
