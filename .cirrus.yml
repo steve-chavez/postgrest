@@ -29,3 +29,12 @@ build_task:
     fingerprint_script:
       - cat stack.yaml
       - cat postgrest.cabal
+
+publish_task:
+  environment:
+    NAME: postgrest-v0.5.0.0-freebsd.tar.xz
+  depends_on:
+    - build
+  script:
+    - tar cjf $NAME postgrest
+    - curl -X POST --data-binary $NAME --header "Authorization: token $TOKEN" --header "Content-Type: application/octet-stream" "https://uploads.github.com/repos/steve-chavez/postgrest/releases/11100502/assets?name=${NAME}"
