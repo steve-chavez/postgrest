@@ -32,9 +32,8 @@ build_task:
 
 publish_task:
   environment:
-    NAME: postgrest-v0.5.0.0-freebsd.tar.xz
+    TOKEN: ENCRYPTED[f2897e57b7db23c9e8386774891e9aec4241131fa0bf5803cd39d69ab84c6815ac87deacf4b65223dbab40a87c2f7493]
+    NAME: postgrest-$CIRRUS_TAG-freebsd.tar.xz
   depends_on:
     - build
-  script:
-    - tar cjf $NAME postgrest
-    - curl -X POST --data-binary $NAME --header "Authorization: token ${TOKEN}" --header "Content-Type: application/octet-stream" "https://uploads.github.com/repos/steve-chavez/postgrest/releases/11100502/assets?name=${NAME}"
+  script: tar cjf $NAME postgrest && curl -X POST --data-binary $NAME --header "Authorization: token ${TOKEN}" --header "Content-Type: application/octet-stream" "https://uploads.github.com/repos/steve-chavez/postgrest/releases/11100502/assets?name=${NAME}"
