@@ -2,6 +2,7 @@ freebsd_instance:
   image: freebsd-11-1-release-amd64
 
 build_task:
+  only_if: $CIRRUS_BRANCH == 'master'
   install_script:
     ## gmake required, otherwise bsd make is used and some cryptic "No operator" errors are shown
     - pkg install -y gmake
@@ -31,6 +32,7 @@ build_task:
       - cat postgrest.cabal
 
 publish_task:
+  only_if: test -n "$CIRRUS_RELEASE"
   environment:
     TOKEN: ENCRYPTED[f2897e57b7db23c9e8386774891e9aec4241131fa0bf5803cd39d69ab84c6815ac87deacf4b65223dbab40a87c2f7493]
     NAME: postgrest-$CIRRUS_TAG-freebsd.tar.xz
@@ -41,4 +43,4 @@ publish_task:
     - curl -X POST --data-binary $NAME \
       -H "Authorization:token ${TOKEN}"\
       -H "Content-Type:application/octet-stream"\
-      "https://uploads.github.com/repos/steve-chavez/postgrest/releases/11100502/assets?name=${NAME}"
+      "https://uploads.github.com/repos/steve-chavez/postgrest/releases/${CIRRUS_RELEASE}/assets?name=${NAME}"
