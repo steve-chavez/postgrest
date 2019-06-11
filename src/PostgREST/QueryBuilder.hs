@@ -14,7 +14,8 @@ and produces SQL Statements.
 Any function that outputs a SQL fragment should be in this module.
 -}
 module PostgREST.QueryBuilder (
-    callProc
+    callFunc
+  , callProc
   , createReadStatement
   , createWriteStatement
   , pgFmtIdent
@@ -29,6 +30,8 @@ module PostgREST.QueryBuilder (
 
 import qualified Data.Aeson            as JSON
 import qualified Data.ByteString.Char8 as BS
+import           Contravariant.Extras       (contramany)
+import           Data.Functor.Contravariant (contramap)
 import qualified Data.HashMap.Strict   as HM
 import qualified Data.Set              as S
 import qualified Data.Text             as T (map, null, takeWhile)
@@ -141,11 +144,19 @@ createWriteStatement selectQuery mutateQuery wantSingle isInsert asCsv rep pKeys
     | wantSingle = asJsonSingleF
     | otherwise = asJsonF
 
-type ProcResults = (Maybe Int64, Int64, ByteString, ByteString)
-callProc :: QualifiedIdentifier -> [PgArg] -> Bool -> SqlQuery -> SqlQuery -> Bool ->
+callProc :: QualifiedIdentifier -> [(ByteString, ByteString)] -> H.Statement [(ByteString, ByteString)] ()
+callProc qi payload = unicodeStatement sql (contramany (contramap snd (HE.param HE.unknown))) HD.unit False
+  where
+    sql = "CALL " <> fromQi qi <> "(" <> args <> ")"
+    idxPayload :: [(Integer, (ByteString, ByteString))]
+    idxPayload = zip [1..] payload
+    args = intercalate "," (toS <$> ((\(i, (k, _)) -> k <> " := $" <> show i) <$> idxPayload))
+
+type FuncResults = (Maybe Int64, Int64, ByteString, ByteString)
+callFunc :: QualifiedIdentifier -> [PgArg] -> Bool -> SqlQuery -> SqlQuery -> Bool ->
             Bool -> Bool -> Bool -> Bool -> Maybe FieldName -> PgVersion ->
-            H.Statement ByteString (Maybe ProcResults)
-callProc qi pgArgs returnsScalar selectQuery countQuery countTotal isSingle paramsAsSingleObject asCsv asBinary binaryField pgVer =
+            H.Statement ByteString (Maybe FuncResults)
+callFunc qi pgArgs returnsScalar selectQuery countQuery countTotal isSingle paramsAsSingleObject asCsv asBinary binaryField pgVer =
   unicodeStatement sql (HE.param HE.unknown) decodeProc True
   where
     sql =[qc|

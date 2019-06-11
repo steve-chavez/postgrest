@@ -132,6 +132,7 @@ decodeProcs =
                   <*> HD.column HD.bool
                   <*> HD.column HD.char)
               <*> (parseVolatility <$> HD.column HD.char)
+              <*> (parseKind <$> HD.column HD.char)
 
     addName :: ProcDescription -> (Text, ProcDescription)
     addName pd = (pdName pd, pd)
@@ -163,9 +164,15 @@ decodeProcs =
           _   -> Scalar qi -- 'b'ase, 'd'omain, 'e'num, 'r'ange
 
     parseVolatility :: Char -> ProcVolatility
-    parseVolatility v | v == 'i' = Immutable
-                      | v == 's' = Stable
+    parseVolatility v | v == 'i'  = Immutable
+                      | v == 's'  = Stable
                       | otherwise = Volatile -- only 'v' can happen here
+
+    parseKind :: Char -> ProcKind
+    parseKind k | k == 'f'  = KFunction
+                | k == 'p'  = KProcedure
+                | k == 'a'  = KAggregate
+                | otherwise = KWindow -- only 'w' can happen here
 
 allProcs :: H.Statement Schema (M.HashMap Text [ProcDescription])
 allProcs = H.Statement (toS procsSqlQuery) (HE.param HE.text) decodeProcs True
@@ -184,7 +191,8 @@ procsSqlQuery = [q|
          coalesce(comp.relname, t.typname) as "rettype_name",
          p.proretset as "rettype_is_setof",
          t.typtype as "rettype_typ",
-         p.provolatile
+         p.provolatile,
+         p.prokind
   FROM pg_proc p
     JOIN pg_namespace pn ON pn.oid = p.pronamespace
     JOIN pg_type t ON t.oid = p.prorettype

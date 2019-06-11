@@ -75,20 +75,26 @@ data RetType = Single PgType | SetOf PgType deriving (Eq, Show, Ord)
 data ProcVolatility = Volatile | Stable | Immutable
   deriving (Eq, Show, Ord)
 
+-- Types of procedure according to prokind in https://www.postgresql.org/docs/11/catalog-pg-proc.html
+-- We don't consider aggregates nor windows, they're here for completion
+data ProcKind = KFunction | KProcedure | KAggregate | KWindow
+  deriving (Eq, Show, Ord)
+
 data ProcDescription = ProcDescription {
   pdName        :: Text
 , pdDescription :: Maybe Text
 , pdArgs        :: [PgArg]
 , pdReturnType  :: RetType
 , pdVolatility  :: ProcVolatility
+, pdKind        :: ProcKind
 } deriving (Show, Eq)
 
 -- Order by least number of args in the case of overloaded functions
 instance Ord ProcDescription where
-  ProcDescription name1 des1 args1 rt1 vol1 `compare` ProcDescription name2 des2 args2 rt2 vol2
+  ProcDescription name1 des1 args1 rt1 vol1 kind1 `compare` ProcDescription name2 des2 args2 rt2 vol2 kind2
     | name1 == name2 && length args1 < length args2  = LT
     | name1 == name2 && length args1 > length args2  = GT
-    | otherwise = (name1, des1, args1, rt1, vol1) `compare` (name2, des2, args2, rt2, vol2)
+    | otherwise = (name1, des1, args1, rt1, vol1, kind1) `compare` (name2, des2, args2, rt2, vol2, kind2)
 
 {-|
   Search a pg procedure by its parameters. Since a function can be overloaded, the name is not enough to find it.
@@ -413,8 +419,6 @@ sourceCTEName = "pg_source"
 type JSPath = [JSPathExp]
 -- | jspath expression, e.g. .property, .property[0] or ."property-dash"
 data JSPathExp = JSPKey Text | JSPIdx Int deriving (Eq, Show)
-
-
 
 -- | Current database connection status data ConnectionStatus
 data ConnectionStatus

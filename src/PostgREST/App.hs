@@ -43,8 +43,8 @@ import PostgREST.Error            (PgError (..), SimpleError (..),
 import PostgREST.Middleware
 import PostgREST.OpenAPI
 import PostgREST.Parsers          (pRequestColumns)
-import PostgREST.QueryBuilder     (ResultsWithCount, callProc,
-                                   createReadStatement,
+import PostgREST.QueryBuilder     (ResultsWithCount, callFunc,
+                                   callProc, createReadStatement,
                                    createWriteStatement,
                                    requestToCountQuery,
                                    requestToQuery)
@@ -266,13 +266,28 @@ app dbStructure proc cols conf apiRequest =
               rpcBinaryField = if returnsScalar
                                  then Right Nothing
                                  else binaryField contentType =<< fldNames
+              isProcedure = fmap pdKind proc == Just KProcedure
               parts = (,) <$> readSqlParts <*> rpcBinaryField in
-          case parts of
+          if isProcedure then do
+            let
+              b :: Either Text (M.HashMap Text JSON.Value)
+              b =
+                if BS.null $ toS $ pjRaw pJson then
+                  Right M.empty
+                else
+                  first toS $ JSON.eitherDecode $ toS $ pjRaw pJson
+            case b of
+              Left e -> return $ responseLBS status500 [] $ toS e
+              Right c -> do
+                let d = (\(x, y) -> (encodeUtf8 x, toS $ JSON.encode y)) <$> M.toList c
+                H.statement d $ callProc qi d
+                return $ responseLBS status200 [] mempty
+          else case parts of
             Left errorResponse -> return errorResponse
             Right ((q, cq), bField) -> do
               let singular = contentType == CTSingularJSON
               row <- H.statement (toS $ pjRaw pJson) $
-                callProc qi (specifiedProcArgs cols proc) returnsScalar q cq shouldCount
+                callFunc qi (specifiedProcArgs cols proc) returnsScalar q cq shouldCount
                          singular (iPreferSingleObjectParameter apiRequest)
                          (contentType == CTTextCSV)
                          (contentType == CTOctetStream) bField
