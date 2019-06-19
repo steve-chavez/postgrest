@@ -36,7 +36,7 @@ build_task:
       - cat postgrest.cabal
 
 publish_task:
-  skip: !$CIRRUS_TAG
+  skip: $CIRRUS_BRANCH !=~ 'release/.*'
   env:
     TOKEN: ENCRYPTED[f2897e57b7db23c9e8386774891e9aec4241131fa0bf5803cd39d69ab84c6815ac87deacf4b65223dbab40a87c2f7493]
     NAME: postgrest-$CIRRUS_TAG-freebsd.tar.xz
