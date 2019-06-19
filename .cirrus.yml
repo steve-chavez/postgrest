@@ -2,7 +2,6 @@ freebsd_instance:
   image: freebsd-11-1-release-amd64
 
 build_task:
-  only_if: $CIRRUS_BRANCH == 'master'
   env:
     TOKEN: test
     NAME: postgrest-$TOKEN-freebsd.tar.xz
