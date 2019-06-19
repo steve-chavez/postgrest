@@ -2,7 +2,8 @@ freebsd_instance:
   image: freebsd-11-1-release-amd64
 
 build_task:
-  environment:
+  only_if: $CIRRUS_BRANCH == 'master'
+  env:
     TOKEN: test
     NAME: postgrest-$TOKEN-freebsd.tar.xz
   install_script:
@@ -35,8 +36,8 @@ build_task:
       - cat postgrest.cabal
 
 publish_task:
-  only_if: test -n "$CIRRUS_RELEASE"
-  environment:
+  skip: !$CIRRUS_TAG
+  env:
     TOKEN: ENCRYPTED[f2897e57b7db23c9e8386774891e9aec4241131fa0bf5803cd39d69ab84c6815ac87deacf4b65223dbab40a87c2f7493]
     NAME: postgrest-$CIRRUS_TAG-freebsd.tar.xz
   depends_on:
