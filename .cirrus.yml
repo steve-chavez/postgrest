@@ -2,8 +2,11 @@ freebsd_instance:
   image: freebsd-11-1-release-amd64
 
 build_task:
-  only_if: $CIRRUS_BRANCH == 'master'
+  environment:
+    TOKEN: test
+    NAME: postgrest-$TOKEN-freebsd.tar.xz
   install_script:
+    - echo $NAME
     ## gmake required, otherwise bsd make is used and some cryptic "No operator" errors are shown
     - pkg install -y gmake
     ## gcc required, otherwise warning: macro expansion producing 'defined' has undefined behavior [-Wexpansion-to-defined]
