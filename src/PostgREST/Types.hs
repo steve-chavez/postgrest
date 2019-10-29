@@ -259,18 +259,16 @@ data QualifiedIdentifier = QualifiedIdentifier {
 
 -- | The relationship [cardinality](https://en.wikipedia.org/wiki/Cardinality_(data_modeling)).
 -- | TODO: missing one-to-one
-data Cardinality = Child  -- ^ a.k.a. many-to-one
-                 | Parent -- ^ a.k.a. one-to-many
+data Cardinality = Parent -- ^ a.k.a. one-to-many
+                 | Child  -- ^ a.k.a. many-to-one
                  | Many   -- ^ a.k.a. many-to-many
                  deriving (Show, Eq)
 
 {-|
-  The name 'Relation' here is used with the meaning
-  "What is the relation between the current node and the parent node".
-  It has nothing to do with PostgreSQL referring to tables/views as relations.
-  The order of the relColumns and relFColumns should be maintained to get
-  the join conditions right.
-  TODO merge relColumns and relFColumns to a tuple or Data.Bimap
+  A Relation(ship) between two tables.
+  TODO: The name Relation is used to refer to a table or view in the relational model, rename to Relationship to avoid confusion.
+  The order of the relColumns and relFColumns should be maintained to get the join conditions right.
+  TODO: merge relColumns and relFColumns to a tuple or Data.Bimap
 -}
 data Relation = Relation {
   relTable     :: Table

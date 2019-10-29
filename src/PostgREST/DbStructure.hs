@@ -50,11 +50,11 @@ getDbStructure schema pgVer = do
   tabs      <- HT.statement () allTables
   cols      <- HT.statement schema $ allColumns tabs
   srcCols   <- HT.statement schema $ allSourceColumns cols pgVer
-  childRels <- HT.statement () $ allChildRelations tabs cols
+  childRels <- HT.statement () $ allParentRelations tabs cols
   keys      <- HT.statement () $ allPrimaryKeys tabs
   procs     <- HT.statement schema allProcs
 
-  let rels = addManyToManyRelations . addParentRelations $ addViewChildRelations srcCols childRels
+  let rels = addManyToManyRelations . addChildRelations $ addViewParentRelations srcCols childRels
       cols' = addForeignKeys rels cols
       keys' = addViewPrimaryKeys srcCols keys
 
@@ -250,20 +250,20 @@ addForeignKeys rels = map addFk
     addFk col = col { colFK = fk col }
     fk col = find (lookupFn col) rels >>= relToFk col
     lookupFn :: Column -> Relation -> Bool
-    lookupFn c Relation{relColumns=cs, relType=rty} = c `elem` cs && rty==Child
+    lookupFn c Relation{relColumns=cs, relType=rty} = c `elem` cs && rty==Parent
     relToFk col Relation{relColumns=cols, relFColumns=colsF} = do
       pos <- L.elemIndex col cols
       colF <- atMay colsF pos
       return $ ForeignKey colF
 
 {-
-Adds Views Child Relations based on SourceColumns found, the logic is as follows:
+Adds Views Parent Relations based on SourceColumns found, the logic is as follows:
 
-Having a Relation{relTable=t1, relColumns=[c1], relFTable=t2, relFColumns=[c2], relType=Child} represented by:
+Having a Relation{relTable=t1, relColumns=[c1], relFTable=t2, relFColumns=[c2], relType=Parent} represented by:
 
 t1.c1------t2.c2
 
-When only having a t1_view.c1 source column, we need to add a View-Table Child Relation
+When only having a t1_view.c1 source column, we need to add a View-Table Parent Relation
 
          t1.c1----t2.c2         t1.c1----------t2.c2
                          ->            ________/
@@ -271,14 +271,14 @@ When only having a t1_view.c1 source column, we need to add a View-Table Child R
       t1_view.c1             t1_view.c1
 
 
-When only having a t2_view.c2 source column, we need to add a Table-View Child Relation
+When only having a t2_view.c2 source column, we need to add a Table-View Parent Relation
 
          t1.c1----t2.c2               t1.c1----------t2.c2
                                ->          \________
                                                     \
                     t2_view.c2                      t2_view.c1
 
-When having t1_view.c1 and a t2_view.c2 source columns, we need to add a View-View Child Relation in addition to the prior
+When having t1_view.c1 and a t2_view.c2 source columns, we need to add a View-View Parent Relation in addition to the prior
 
          t1.c1----t2.c2               t1.c1----------t2.c2
                                ->          \________/
@@ -287,10 +287,10 @@ When having t1_view.c1 and a t2_view.c2 source columns, we need to add a View-Vi
 
 The logic for composite pks is similar just need to make sure all the Relation columns have source columns.
 -}
-addViewChildRelations :: [SourceColumn] -> [Relation] -> [Relation]
-addViewChildRelations allSrcCols = concatMap (\rel ->
+addViewParentRelations :: [SourceColumn] -> [Relation] -> [Relation]
+addViewParentRelations allSrcCols = concatMap (\rel ->
   rel : case rel of
-    Relation{relType=Child, relTable, relColumns, relFTable, relFColumns} ->
+    Relation{relType=Parent, relTable, relColumns, relFTable, relFColumns} ->
 
       let srcColsGroupedByView :: [Column] -> [[SourceColumn]]
           srcColsGroupedByView relCols = L.groupBy (\(_, viewCol1) (_, viewCol2) -> colTable viewCol1 == colTable viewCol2) $
@@ -305,36 +305,36 @@ addViewChildRelations allSrcCols = concatMap (\rel ->
           -- TODO: This could be avoided if the Relation type is improved with a structure that maintains the association of relColumns and relFColumns
           srcCols `sortAccordingTo` cols = sortOn (\(k, _) -> L.lookup k $ zip cols [0::Int ..]) srcCols
 
-          viewTableChild =
+          viewTableParent =
             [ Relation (getView srcCols) (snd <$> srcCols `sortAccordingTo` relColumns)
                        relFTable relFColumns
-                       Child Nothing Nothing Nothing
+                       Parent Nothing Nothing Nothing
             | srcCols <- relSrcCols, srcCols `allSrcColsOf` relColumns ]
 
-          tableViewChild =
+          tableViewParent =
             [ Relation relTable relColumns
                        (getView fSrcCols) (snd <$> fSrcCols `sortAccordingTo` relFColumns)
-                       Child Nothing Nothing Nothing
+                       Parent Nothing Nothing Nothing
             | fSrcCols <- relFSrcCols, fSrcCols `allSrcColsOf` relFColumns ]
 
-          viewViewChild =
+          viewViewParent =
             [ Relation (getView srcCols) (snd <$> srcCols `sortAccordingTo` relColumns)
                        (getView fSrcCols) (snd <$> fSrcCols `sortAccordingTo` relFColumns)
-                       Child Nothing Nothing Nothing
+                       Parent Nothing Nothing Nothing
             | srcCols  <- relSrcCols, srcCols `allSrcColsOf` relColumns
             , fSrcCols <- relFSrcCols, fSrcCols `allSrcColsOf` relFColumns ]
 
-      in viewTableChild ++ tableViewChild ++ viewViewChild
+      in viewTableParent ++ tableViewParent ++ viewViewParent
 
     _ -> [])
 
-addParentRelations :: [Relation] -> [Relation]
-addParentRelations = concatMap (\rel@(Relation t c ft fc _ _ _ _) -> [rel, Relation ft fc t c Parent Nothing Nothing Nothing])
+addChildRelations :: [Relation] -> [Relation]
+addChildRelations = concatMap (\rel@(Relation t c ft fc _ _ _ _) -> [rel, Relation ft fc t c Child Nothing Nothing Nothing])
 
 addManyToManyRelations :: [Relation] -> [Relation]
 addManyToManyRelations rels = rels ++ addMirrorRelation (mapMaybe link2Relation links)
   where
-    links = join $ map (combinations 2) $ filter (not . null) $ groupWith groupFn $ filter ( (==Child). relType) rels
+    links = join $ map (combinations 2) $ filter (not . null) $ groupWith groupFn $ filter ( (==Parent). relType) rels
     groupFn :: Relation -> Text
     groupFn Relation{relTable=Table{tableSchema=s, tableName=t}} = s <> "_" <> t
     -- Reference : https://wiki.haskell.org/99_questions/Solutions/26
@@ -567,8 +567,8 @@ columnFromRow tabs (s, t, n, desc, pos, nul, typ, u, l, p, d, e) = buildColumn <
     parseEnum :: Maybe Text -> [Text]
     parseEnum = maybe [] (split (==','))
 
-allChildRelations :: [Table] -> [Column] -> H.Statement () [Relation]
-allChildRelations tabs cols =
+allParentRelations :: [Table] -> [Column] -> H.Statement () [Relation]
+allParentRelations tabs cols =
   H.Statement sql HE.noParams (decodeRelations tabs cols) True
  where
   sql = [q|
@@ -599,7 +599,7 @@ allChildRelations tabs cols =
 
 relationFromRow :: [Table] -> [Column] -> (Text, Text, [Text], Text, Text, [Text]) -> Maybe Relation
 relationFromRow allTabs allCols (rs, rt, rcs, frs, frt, frcs) =
-  Relation <$> table <*> cols <*> tableF <*> colsF <*> pure Child <*> pure Nothing <*> pure Nothing <*> pure Nothing
+  Relation <$> table <*> cols <*> tableF <*> colsF <*> pure Parent <*> pure Nothing <*> pure Nothing <*> pure Nothing
   where
     findTable s t = find (\tbl -> tableSchema tbl == s && tableName tbl == t) allTabs
     findCol s t c = find (\col -> tableSchema (colTable col) == s && tableName (colTable col) == t && colName col == c) allCols

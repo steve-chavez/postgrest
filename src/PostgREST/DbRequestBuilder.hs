@@ -126,7 +126,7 @@ findRelation schema allRelations nodeTableName parentNodeTableName relationDetai
 
         -- (request)        => projects { ..., clients{...} }
         -- will match
-        -- (relation type)  => parent
+        -- (relation type)  => child
         -- (entity)         => clients  {id}
         -- (foriegn entity) => projects {client_id}
         (
@@ -136,7 +136,7 @@ findRelation schema allRelations nodeTableName parentNodeTableName relationDetai
 
         -- (request)        => projects { ..., client_id{...} }
         -- will match
-        -- (relation type)  => parent
+        -- (relation type)  => child
         -- (entity)         => clients  {id}
         -- (foriegn entity) => projects {client_id}
         (
@@ -148,7 +148,7 @@ findRelation schema allRelations nodeTableName parentNodeTableName relationDetai
 
         -- (request)        => project_id { ..., client_id{...} }
         -- will match
-        -- (relation type)  => parent
+        -- (relation type)  => child
         -- (entity)         => clients  {id}
         -- (foriegn entity) => projects {client_id}
         -- this case works becasue before reaching this place
@@ -156,33 +156,33 @@ findRelation schema allRelations nodeTableName parentNodeTableName relationDetai
 
       Just rd ->
 
-        -- (request)        => clients { ..., projects.client_id{...} }
+        -- (request)        => clients { ..., projects!client_id{...} }
         -- will match
-        -- (relation type)  => child
+        -- (relation type)  => Parent
         -- (entity)         => clients  {id}
         -- (foriegn entity) => projects {client_id}
         (
-          relType == Child &&
+          relType == Parent &&
           nodeTableName == tableName relTable && -- match relation table name
           parentNodeTableName == tableName relFTable && -- match relation foreign table name
           length relColumns == 1 &&
           rd == colName (unsafeHead relColumns)
         ) ||
 
-        -- (request)        => message { ..., person_detail.sender{...} }
+        -- (request)        => message { ..., person_detail!sender{...} }
         -- will match
-        -- (relation type)  => parent
+        -- (relation type)  => Child
         -- (entity)         => message  {sender}
         -- (foriegn entity) => person_detail {id}
         (
-          relType == Parent &&
+          relType == Child &&
           nodeTableName == tableName relTable && -- match relation table name
           parentNodeTableName == tableName relFTable && -- match relation foreign table name
           length relFColumns == 1 &&
           rd == colName (unsafeHead relFColumns)
         ) ||
 
-        -- (request)        => tasks { ..., users.tasks_users{...} }
+        -- (request)        => tasks { ..., users!tasks_users{...} }
         -- will match
         -- (relation type)  => many
         -- (entity)         => users
@@ -226,9 +226,9 @@ addJoinConditions previousAlias (Node node@(query@Select{from=tbl}, nodeProps@(_
 getJoinConditions :: Maybe Alias -> Maybe Alias -> Relation -> [JoinCondition]
 getJoinConditions previousAlias newAlias (Relation Table{tableSchema=tSchema, tableName=tN} cols Table{tableName=ftN} fCols typ lt lc1 lc2) =
   case typ of
-    Child  ->
-        zipWith (toJoinCondition tN ftN) cols fCols
     Parent ->
+        zipWith (toJoinCondition tN ftN) cols fCols
+    Child  ->
         zipWith (toJoinCondition tN ftN) cols fCols
     Many   ->
         let ltN = maybe "" tableName lt in
@@ -303,7 +303,7 @@ addProperty :: (a -> ReadRequest -> ReadRequest) -> (EmbedPath, a) -> ReadReques
 addProperty f ([], a) rr = f a rr
 addProperty f (targetNodeName:remainingPath, a) (Node rn forest) =
   case pathNode of
-    Nothing -> Node rn forest -- the property is silenty dropped in the Request does not contain the required path
+    Nothing -> Node rn forest -- the property is silenty dropped if the Request does not contain the required path
     Just tn -> Node rn (addProperty f (remainingPath, a) tn:delete tn forest)
   where
     pathNode = find (\(Node (_,(nodeName,_,alias,_,_)) _) -> nodeName == targetNodeName || alias == Just targetNodeName) forest
