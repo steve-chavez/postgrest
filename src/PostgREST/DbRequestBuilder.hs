@@ -105,9 +105,13 @@ addRelations schema allRelations parentNode (Node (query@Select{from=tbl}, (node
       let newFrom r = if qiName tbl == nodeName then tableQi (relTable r) else tbl
           newReadNode = (\r -> (query{from=newFrom r}, (nodeName, Just r, alias, Nothing, depth))) <$> rel
           parentNodeTable = qiName parentNodeQi
+          results = findRelation schema allRelations nodeName parentNodeTable relationDetail
           rel :: Either ApiRequestError Relation
-          rel = note (NoRelationBetween parentNodeTable nodeName) $
-                findRelation schema allRelations nodeName parentNodeTable relationDetail in
+          rel = case results of
+            []  -> Left $ NoRelationBetween parentNodeTable nodeName
+            [r] -> Right r
+            rs  -> Left $ AmbiguousRelationBetween parentNodeTable nodeName rs
+      in
       Node <$> newReadNode <*> (updateForest . hush $ Node <$> newReadNode <*> pure forest)
     _ ->
       let rn = (query, (nodeName, Nothing, alias, Nothing, depth)) in
@@ -116,9 +120,9 @@ addRelations schema allRelations parentNode (Node (query@Select{from=tbl}, (node
     updateForest :: Maybe ReadRequest -> Either ApiRequestError [ReadRequest]
     updateForest rq = mapM (addRelations schema allRelations rq) forest
 
-findRelation :: Schema -> [Relation] -> NodeName -> TableName -> Maybe RelationDetail -> Maybe Relation
+findRelation :: Schema -> [Relation] -> NodeName -> TableName -> Maybe RelationDetail -> [Relation]
 findRelation schema allRelations nodeTableName parentNodeTableName relationDetail =
-  find (\Relation{relTable, relColumns, relFTable, relFColumns, relType, relLinkTable} ->
+  filter (\Relation{relTable, relColumns, relFTable, relFColumns, relType, relLinkTable} ->
     -- Both relation ends need to be on the exposed schema
     schema == tableSchema relTable && schema == tableSchema relFTable &&
     case relationDetail of
