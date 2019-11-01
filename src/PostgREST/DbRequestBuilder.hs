@@ -108,9 +108,9 @@ addRelations schema allRelations parentNode (Node (query@Select{from=tbl}, (node
           results = findRelation schema allRelations nodeName parentNodeTable relationDetail
           rel :: Either ApiRequestError Relation
           rel = case results of
-            []  -> Left $ NoRelationBetween parentNodeTable nodeName
+            []  -> Left $ NoRelBetween parentNodeTable nodeName
             [r] -> Right r
-            rs  -> Left $ AmbiguousRelationBetween parentNodeTable nodeName rs
+            rs  -> Left $ AmbiguousRelBetween parentNodeTable nodeName rs
       in
       Node <$> newReadNode <*> (updateForest . hush $ Node <$> newReadNode <*> pure forest)
     _ ->

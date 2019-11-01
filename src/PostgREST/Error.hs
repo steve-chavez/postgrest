@@ -48,23 +48,23 @@ data ApiRequestError
   | InvalidRange
   | InvalidBody ByteString
   | ParseRequestError Text Text
-  | NoRelationBetween Text Text
-  | AmbiguousRelationBetween Text Text [Relation]
+  | NoRelBetween Text Text
+  | AmbiguousRelBetween Text Text [Relation]
   | InvalidFilters
   | UnknownRelation                -- Unreachable?
   | UnsupportedVerb                -- Unreachable?
   deriving (Show, Eq)
 
 instance PgrstError ApiRequestError where
-  status InvalidRange               = HT.status416
-  status InvalidFilters             = HT.status405
-  status (InvalidBody _)            = HT.status400
-  status UnsupportedVerb            = HT.status405
-  status UnknownRelation            = HT.status404
-  status ActionInappropriate        = HT.status405
-  status (ParseRequestError _ _)    = HT.status400
-  status (NoRelationBetween _ _)    = HT.status400
-  status AmbiguousRelationBetween{} = HT.status300
+  status InvalidRange            = HT.status416
+  status InvalidFilters          = HT.status405
+  status (InvalidBody _)         = HT.status400
+  status UnsupportedVerb         = HT.status405
+  status UnknownRelation         = HT.status404
+  status ActionInappropriate     = HT.status405
+  status (ParseRequestError _ _) = HT.status400
+  status (NoRelBetween _ _)      = HT.status400
+  status AmbiguousRelBetween{}   = HT.status300
 
   headers _ = [toHeader CTApplicationJSON]
 
@@ -79,30 +79,41 @@ instance JSON.ToJSON ApiRequestError where
     "message" .= ("HTTP Range error" :: Text)]
   toJSON UnknownRelation = JSON.object [
     "message" .= ("Unknown relation" :: Text)]
-  toJSON (NoRelationBetween parent child) = JSON.object [
+  toJSON (NoRelBetween parent child) = JSON.object [
     "message" .= ("Could not find foreign keys between these entities, No relation found between " <> parent <> " and " <> child :: Text)]
-  toJSON (AmbiguousRelationBetween parent child rels) = JSON.object [
-    "hint"    .= ("Disambiguate by following the details key information" :: Text),
-    "message" .= ("More than one relationship was found for these entities: " <> parent <> " and " <> child :: Text),
-    "details" .= (ambiguousRelError <$> rels) ]
+  toJSON (AmbiguousRelBetween parent child rels) = JSON.object [
+    "hint"    .= ("Disambiguate by choosing a relationship from the `details` key" :: Text),
+    "message" .= ("More than one relationship was found for " <> parent <> " and " <> child :: Text),
+    "details" .= (compressedRel <$> rels) ]
   toJSON UnsupportedVerb = JSON.object [
     "message" .= ("Unsupported HTTP verb" :: Text)]
   toJSON InvalidFilters = JSON.object [
     "message" .= ("Filters must include all and only primary key columns with 'eq' operators" :: Text)]
 
-ambiguousRelError :: Relation -> JSON.Value
-ambiguousRelError rel =
+compressedRel :: Relation -> JSON.Value
+compressedRel rel =
   let
+    -- | Format like "test.orders[billing_address_id]". For easier debugging the format is compressed instead of structured.
+    fmt sch tbl cols = schTbl sch tbl <> joinCols cols
+    fmtMany sch tbl cols1 cols2 = schTbl sch tbl <> joinCols cols1 <> joinCols cols2
+    schTbl sch tbl = sch <> "." <> tbl
+    joinCols cols  = "[" <> T.intercalate ", " cols <> "]"
+
     tab = relTable rel
     fTab = relFTable rel
-    -- Format like "test.orders[billing_address_id]". For better debugging the format is compressed instead of structured.
-    fmt sch tbl cols = sch <> "." <> tbl <> "[" <> T.intercalate ", " cols <> "]"
   in
-  JSON.object [
-      "source" .= fmt (tableSchema tab) (tableName tab) (colName <$> relColumns rel)
-    , "target" .= fmt (tableSchema fTab) (tableName fTab) (colName <$> relFColumns rel)
-    , "cardinality" .= (show $ relType rel :: Text)
-    ]
+  JSON.object $ [
+    "source"      .= fmt (tableSchema tab) (tableName tab) (colName <$> relColumns rel)
+  , "target"      .= fmt (tableSchema fTab) (tableName fTab) (colName <$> relFColumns rel)
+  , "cardinality" .= (show $ relType rel :: Text)
+  ] ++
+  if relType rel == Many
+    then [
+     "junction" .= case (relLinkTable rel, relLinkCols1 rel, relLinkCols2 rel) of
+        (Just lt, Just lc1, Just lc2) -> fmtMany (tableSchema lt) (tableName lt) (colName <$> lc1) (colName <$> lc2)
+        _                             -> toS $ JSON.encode JSON.Null
+      ]
+    else mempty
 
 data PgError = PgError Authenticated P.UsageError
 type Authenticated = Bool
