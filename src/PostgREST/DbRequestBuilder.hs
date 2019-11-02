@@ -75,16 +75,16 @@ initReadRequest rootQi =
     rootDepth = 0
     rootSchema = qiSchema rootQi
     rootName = qiName rootQi
-    initial = Node (Select [] rootQi Nothing [] [] [] [] allRange, (rootName, Nothing, Nothing, Nothing, rootDepth)) []
+    initial = Node (Select [] rootQi Nothing [] [] [] [] allRange, (rootName, Nothing, Nothing, (Nothing, Nothing), rootDepth)) []
     treeEntry :: Depth -> Tree SelectItem -> ReadRequest -> ReadRequest
-    treeEntry depth (Node fld@((fn, _),_,alias,relationDetail) fldForest) (Node (q, i) rForest) =
+    treeEntry depth (Node fld@((fn, _),_,alias, embedHint) fldForest) (Node (q, i) rForest) =
       let nxtDepth = succ depth in
       case fldForest of
         [] -> Node (q {select=fld:select q}, i) rForest
         _  -> Node (q, i) $
               foldr (treeEntry nxtDepth)
               (Node (Select [] (QualifiedIdentifier rootSchema fn) Nothing [] [] [] [] allRange,
-                (fn, Nothing, alias, relationDetail, nxtDepth)) [])
+                (fn, Nothing, alias, embedHint, nxtDepth)) [])
               fldForest:rForest
 
 treeRestrictRange :: Maybe Integer -> ReadRequest -> Either ApiRequestError ReadRequest
@@ -99,13 +99,13 @@ augumentRequestWithJoin schema allRels request =
   >>= addJoinConditions Nothing
 
 addRelations :: Schema -> [Relation] -> Maybe ReadRequest -> ReadRequest -> Either ApiRequestError ReadRequest
-addRelations schema allRelations parentNode (Node (query@Select{from=tbl}, (nodeName, _, alias, relationDetail, depth)) forest) =
+addRelations schema allRelations parentNode (Node (query@Select{from=tbl}, (nodeName, _, alias, embedHint, depth)) forest) =
   case parentNode of
     Just (Node (Select{from=parentNodeQi}, _) _) ->
       let newFrom r = if qiName tbl == nodeName then tableQi (relTable r) else tbl
-          newReadNode = (\r -> (query{from=newFrom r}, (nodeName, Just r, alias, Nothing, depth))) <$> rel
+          newReadNode = (\r -> (query{from=newFrom r}, (nodeName, Just r, alias, (Nothing, Nothing), depth))) <$> rel
           parentNodeTable = qiName parentNodeQi
-          results = findRelation schema allRelations nodeName parentNodeTable relationDetail
+          results = findRelation schema allRelations nodeName parentNodeTable embedHint
           rel :: Either ApiRequestError Relation
           rel = case results of
             []  -> Left $ NoRelBetween parentNodeTable nodeName
@@ -114,19 +114,19 @@ addRelations schema allRelations parentNode (Node (query@Select{from=tbl}, (node
       in
       Node <$> newReadNode <*> (updateForest . hush $ Node <$> newReadNode <*> pure forest)
     _ ->
-      let rn = (query, (nodeName, Nothing, alias, Nothing, depth)) in
+      let rn = (query, (nodeName, Nothing, alias, (Nothing, Nothing), depth)) in
       Node rn <$> updateForest (Just $ Node rn forest)
   where
     updateForest :: Maybe ReadRequest -> Either ApiRequestError [ReadRequest]
     updateForest rq = mapM (addRelations schema allRelations rq) forest
 
-findRelation :: Schema -> [Relation] -> NodeName -> TableName -> Maybe RelationDetail -> [Relation]
-findRelation schema allRelations nodeTableName parentNodeTableName relationDetail =
+findRelation :: Schema -> [Relation] -> NodeName -> TableName -> EmbedHint -> [Relation]
+findRelation schema allRelations nodeTableName parentNodeTableName embedHint =
   filter (\Relation{relTable, relColumns, relFTable, relFColumns, relType, relLinkTable} ->
     -- Both relation ends need to be on the exposed schema
     schema == tableSchema relTable && schema == tableSchema relFTable &&
-    case relationDetail of
-      Nothing ->
+    case embedHint of
+      (Nothing, Nothing) ->
 
         -- (request)        => projects { ..., clients{...} }
         -- will match
@@ -158,7 +158,7 @@ findRelation schema allRelations nodeTableName parentNodeTableName relationDetai
         -- this case works becasue before reaching this place
         -- addRelation will turn project_id to project so the above condition will match
 
-      Just rd ->
+      (Just fkHint, Nothing) ->
 
         -- (request)        => clients { ..., projects!client_id{...} }
         -- will match
@@ -170,7 +170,7 @@ findRelation schema allRelations nodeTableName parentNodeTableName relationDetai
           nodeTableName == tableName relTable && -- match relation table name
           parentNodeTableName == tableName relFTable && -- match relation foreign table name
           length relColumns == 1 &&
-          rd == colName (unsafeHead relColumns)
+          fkHint == colName (unsafeHead relColumns)
         ) ||
 
         -- (request)        => message { ..., person_detail!sender{...} }
@@ -183,7 +183,7 @@ findRelation schema allRelations nodeTableName parentNodeTableName relationDetai
           nodeTableName == tableName relTable && -- match relation table name
           parentNodeTableName == tableName relFTable && -- match relation foreign table name
           length relFColumns == 1 &&
-          rd == colName (unsafeHead relFColumns)
+          fkHint == colName (unsafeHead relFColumns)
         ) ||
 
         -- (request)        => tasks { ..., users!tasks_users{...} }
@@ -195,8 +195,33 @@ findRelation schema allRelations nodeTableName parentNodeTableName relationDetai
           relType == Many &&
           nodeTableName == tableName relTable && -- match relation table name
           parentNodeTableName == tableName relFTable && -- match relation foreign table name
-          rd == tableName (fromJust relLinkTable)
+          fkHint == tableName (fromJust relLinkTable)
         )
+
+      (Nothing, Just cardHint) ->
+
+        -- (request)        => web_content{ ..., web_content!o2m{...}
+        -- will match
+        -- (relation type)  => parent
+        -- (entity)         => web_content {id}
+        -- (foriegn entity) => web_content {p_web_id}
+        cardHint == relType &&
+        nodeTableName == tableName relTable && -- match relation table name
+        parentNodeTableName == tableName relFTable -- match relation foreign table name
+
+      (Just fkHint, Just cardHint) ->
+
+        -- (request)        => web_content{ ..., web_content!o2m!id{...}
+        -- will match
+        -- (relation type)  => parent
+        -- (entity)         => web_content {id}
+        -- (foriegn entity) => web_content {p_web_id}
+        relType == cardHint &&
+        nodeTableName == tableName relTable && -- match relation table name
+        parentNodeTableName == tableName relFTable && -- match relation foreign table name
+        length relFColumns == 1 &&
+        fkHint == colName (unsafeHead relFColumns)
+
   ) allRelations
 
 -- previousAlias is only used for the case of self joins
