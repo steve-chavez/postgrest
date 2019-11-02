@@ -26,7 +26,7 @@ import Network.Socket           (Family (AF_UNIX),
                                  defaultProtocol, listen,
                                  maxListenQueue, socket)
 import Network.Wai.Handler.Warp (defaultSettings, runSettings,
-                                 runSettingsSocket, setHost, setPort,
+                                 runSettingsSocket, setHost, setPort, setOnExceptionResponse, exceptionResponseForDebug,
                                  setServerName)
 import System.Directory         (removeFile)
 import System.IO                (BufferMode (..), hSetBuffering)
@@ -165,11 +165,11 @@ main = do
       maybeSocketAddr = configSocket conf
       pgSettings = toS (configDatabase conf) -- is the db-uri
       roleClaimKey = configRoleClaimKey conf
-      appSettings =
-        setHost ((fromString . toS) host) -- Warp settings
-        . setPort port
-        . setServerName (toS $ "postgrest/" <> prettyVersion) $
-        defaultSettings
+      appSettings = setHost ((fromString . toS) host) -- Warp settings
+                  . setPort port
+                  . setServerName (toS $ "postgrest/" <> prettyVersion)
+                  . setOnExceptionResponse (exceptionResponseForDebug)
+                  $ defaultSettings
 
   -- Checks that the provided proxy uri is formated correctly
   when (isMalformedProxyUri $ toS <$> proxy) $
