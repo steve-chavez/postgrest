@@ -20,12 +20,12 @@ spec =
           {
             "details": [
             {
-              "cardinality": "Parent",
+              "cardinality": "M2O",
               "source": "test.person[id]",
               "target": "test.message[sender]"
             },
             {
-              "cardinality": "Parent",
+              "cardinality": "M2O",
               "source": "test.person_detail[id]",
               "target": "test.message[sender]"
             }
@@ -43,80 +43,80 @@ spec =
           {
             "details": [
                 {
-                    "cardinality": "Child",
+                    "cardinality": "O2M",
                     "source": "test.articleStars[userId]",
                     "target": "test.users[id]"
                 },
                 {
-                    "cardinality": "Child",
+                    "cardinality": "O2M",
                     "source": "test.limited_article_stars[user_id]",
                     "target": "test.users[id]"
                 },
                 {
-                    "cardinality": "Child",
+                    "cardinality": "O2M",
                     "source": "test.comments[commenter_id]",
                     "target": "test.users[id]"
                 },
                 {
-                    "cardinality": "Child",
+                    "cardinality": "O2M",
                     "source": "test.users_projects[user_id]",
                     "target": "test.users[id]"
                 },
                 {
-                    "cardinality": "Child",
+                    "cardinality": "O2M",
                     "source": "test.users_tasks[user_id]",
                     "target": "test.users[id]"
                 },
                 {
-                    "cardinality": "Many",
+                    "cardinality": "M2M",
                     "junction": "private.article_stars[article_id][user_id]",
                     "source": "test.articles[id]",
                     "target": "test.users[id]"
                 },
                 {
-                    "cardinality": "Many",
+                    "cardinality": "M2M",
                     "junction": "test.articleStars[articleId][userId]",
                     "source": "test.articles[id]",
                     "target": "test.users[id]"
                 },
                 {
-                    "cardinality": "Many",
+                    "cardinality": "M2M",
                     "junction": "test.limited_article_stars[article_id][user_id]",
                     "source": "test.articles[id]",
                     "target": "test.users[id]"
                 },
                 {
-                    "cardinality": "Many",
+                    "cardinality": "M2M",
                     "junction": "test.users_projects[project_id][user_id]",
                     "source": "test.projects[id]",
                     "target": "test.users[id]"
                 },
                 {
-                    "cardinality": "Many",
+                    "cardinality": "M2M",
                     "junction": "test.users_projects[project_id][user_id]",
                     "source": "test.materialized_projects[id]",
                     "target": "test.users[id]"
                 },
                 {
-                    "cardinality": "Many",
+                    "cardinality": "M2M",
                     "junction": "test.users_projects[project_id][user_id]",
                     "source": "test.projects_view[id]",
                     "target": "test.users[id]"
                 },
                 {
-                    "cardinality": "Many",
+                    "cardinality": "M2M",
                     "junction": "test.users_projects[project_id][user_id]",
                     "source": "test.projects_view_alt[t_id]",
                     "target": "test.users[id]"
                 },
                 {
-                    "cardinality": "Many",
+                    "cardinality": "M2M",
                     "junction": "test.users_tasks[task_id][user_id]",
                     "source": "test.tasks[id]",
                     "target": "test.users[id]"
                 },
                 {
-                    "cardinality": "Many",
+                    "cardinality": "M2M",
                     "junction": "test.users_tasks[task_id][user_id]",
                     "source": "test.filtered_tasks[myId]",
                     "target": "test.users[id]"

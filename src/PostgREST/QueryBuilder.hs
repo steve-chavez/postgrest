@@ -55,7 +55,7 @@ getJoinsSelects :: ReadRequest -> ([SqlFragment], [SqlFragment]) -> ([SqlFragmen
 getJoinsSelects rr@(Node (_, (name, Just Relation{relType=relTyp,relTable=Table{tableName=table}}, alias, _, _)) _) (j,s) =
   let subquery = readRequestToQuery rr in
   case relTyp of
-    Parent ->
+    M2O ->
       let aliasOrName = fromMaybe name alias
           localTableName = pgFmtIdent $ table <> "_" <> aliasOrName
           sel = "row_to_json(" <> localTableName <> ".*) AS " <> pgFmtIdent aliasOrName

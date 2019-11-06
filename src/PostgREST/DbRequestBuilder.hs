@@ -116,7 +116,7 @@ addRelations schema allRelations parentNode (Node (query@Select{from=tbl}, (node
               let rel0 = head rs
                   rel1 = rs !! 1 in
               if length rs == 2 && relTable rel0 == relTable rel1 && relFTable rel0 == relFTable rel1
-                then note (NoRelBetween parentNodeTable nodeName) (find (\r -> relType r == Child) rs)
+                then note (NoRelBetween parentNodeTable nodeName) (find (\r -> relType r == O2M) rs)
                 else Left $ AmbiguousRelBetween parentNodeTable nodeName rs
       in
       Node <$> newReadNode <*> (updateForest . hush $ Node <$> newReadNode <*> pure forest)
@@ -169,11 +169,11 @@ findRelation schema allRelations nodeTableName parentNodeTableName relationDetai
 
         -- (request)        => clients { ..., projects.client_id{...} }
         -- will match
-        -- (relation type)  => child
+        -- (relation type)  => O2M
         -- (entity)         => clients  {id}
         -- (foriegn entity) => projects {client_id}
         (
-          relType == Child &&
+          relType == O2M &&
           nodeTableName == tableName relTable && -- match relation table name
           parentNodeTableName == tableName relFTable && -- match relation foreign table name
           length relColumns == 1 &&
@@ -182,11 +182,11 @@ findRelation schema allRelations nodeTableName parentNodeTableName relationDetai
 
         -- (request)        => message { ..., person_detail.sender{...} }
         -- will match
-        -- (relation type)  => parent
+        -- (relation type)  => O2M
         -- (entity)         => message  {sender}
         -- (foriegn entity) => person_detail {id}
         (
-          relType == Parent &&
+          relType == M2O &&
           nodeTableName == tableName relTable && -- match relation table name
           parentNodeTableName == tableName relFTable && -- match relation foreign table name
           length relFColumns == 1 &&
@@ -195,11 +195,11 @@ findRelation schema allRelations nodeTableName parentNodeTableName relationDetai
 
         -- (request)        => tasks { ..., users.tasks_users{...} }
         -- will match
-        -- (relation type)  => many
+        -- (relation type)  => M2M
         -- (entity)         => users
         -- (foriegn entity) => tasks
         (
-          relType == Many &&
+          relType == M2M &&
           nodeTableName == tableName relTable && -- match relation table name
           parentNodeTableName == tableName relFTable && -- match relation foreign table name
           rd == tableName (fromJust relLinkTable)
@@ -210,9 +210,9 @@ findRelation schema allRelations nodeTableName parentNodeTableName relationDetai
 addJoinConditions :: Maybe Alias -> ReadRequest -> Either ApiRequestError ReadRequest
 addJoinConditions previousAlias (Node node@(query@Select{from=tbl}, nodeProps@(_, relation, _, _, depth)) forest) =
   case relation of
-    Just rel@Relation{relType=Parent} -> Node (augmentQuery rel, nodeProps) <$> updatedForest
-    Just rel@Relation{relType=Child} -> Node (augmentQuery rel, nodeProps) <$> updatedForest
-    Just rel@Relation{relType=Many, relLinkTable=lTable} ->
+    Just rel@Relation{relType=O2M} -> Node (augmentQuery rel, nodeProps) <$> updatedForest
+    Just rel@Relation{relType=M2O} -> Node (augmentQuery rel, nodeProps) <$> updatedForest
+    Just rel@Relation{relType=M2M, relLinkTable=lTable} ->
       case lTable of
         Just linkTable ->
           let rq = augmentQuery rel in
@@ -237,11 +237,11 @@ addJoinConditions previousAlias (Node node@(query@Select{from=tbl}, nodeProps@(_
 getJoinConditions :: Maybe Alias -> Maybe Alias -> Relation -> [JoinCondition]
 getJoinConditions previousAlias newAlias (Relation Table{tableSchema=tSchema, tableName=tN} cols Table{tableName=ftN} fCols typ lt lc1 lc2) =
   case typ of
-    Child  ->
+    O2M ->
         zipWith (toJoinCondition tN ftN) cols fCols
-    Parent ->
+    M2O ->
         zipWith (toJoinCondition tN ftN) cols fCols
-    Many   ->
+    M2M ->
         let ltN = maybe "" tableName lt in
         zipWith (toJoinCondition tN ltN) cols (fromMaybe [] lc1) ++ zipWith (toJoinCondition ftN ltN) fCols (fromMaybe [] lc2)
   where
@@ -362,9 +362,9 @@ returningCols rr@(Node _ forest) = returnings
     -- This also works for the other relType's.
     fkCols = concat $ mapMaybe (\case
         Node (_, (_, Just Relation{relFColumns=cols, relType=relTyp}, _, _, _)) _ -> case relTyp of
-          Parent -> Just cols
-          Child  -> Just cols
-          Many   -> Just cols
+          O2M -> Just cols
+          M2O -> Just cols
+          M2M -> Just cols
         _ -> Nothing
       ) forest
     -- However if the "client_id" is present, e.g. mutateRequest to /projects?select=client_id,name,clients(name)
