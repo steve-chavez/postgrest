@@ -262,7 +262,11 @@ data QualifiedIdentifier = QualifiedIdentifier {
 data Cardinality = O2M -- ^ one-to-many,  previously known as Parent
                  | M2O -- ^ many-to-one,  previously known as Child
                  | M2M -- ^ many-to-many, previously known as Many
-                 deriving (Show, Eq)
+                 deriving Eq
+instance Show Cardinality where
+  show O2M = "one-to-many"
+  show M2O = "many-to-one"
+  show M2M = "many-to-many"
 
 {-|
   The name 'Relation' here is used with the meaning
