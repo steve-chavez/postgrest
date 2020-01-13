@@ -131,24 +131,26 @@ app dbStructure proc cols conf apiRequest =
                              then limitedQuery cq ((+ 1) <$> maxRows) -- LIMIT maxRows + 1 so we can determine below that maxRows was surpassed
                              else cq
                   stm = createReadStatement q cQuery (contentType == CTSingularJSON) shouldCount
-                        (contentType == CTTextCSV) bField
+                        (contentType == CTTextCSV) bField (pgVersion dbStructure)
                   explStm = createExplainStatement cq
               row <- H.statement () stm
-              let (tableTotal, queryTotal, _ , body) = row
-              total <- if | plannedCount   -> H.statement () explStm
-                          | estimatedCount -> if tableTotal > (fromIntegral <$> maxRows)
-                                                then do estTotal <- H.statement () explStm
-                                                        pure $ if estTotal > tableTotal then estTotal else tableTotal
-                                                else pure tableTotal
-                          | otherwise      -> pure tableTotal
-              let (status, contentRange) = rangeStatusHeader topLevelRange queryTotal total
-              return $
-                if contentType == CTSingularJSON && queryTotal /= 1
-                  then errorResponseFor . singularityError $ queryTotal
-                  else responseLBS status
-                    [toHeader contentType, contentRange,
-                     contentLocationH tName (iCanonicalQS apiRequest)]
-                    (if headersOnly then mempty else toS body)
+              let (tableTotal, queryTotal, _ , body, gucHeaders) = row
+              case gucHeaders of
+                Left _ -> return . errorResponseFor $ GucHeadersError
+                Right hs -> do
+                  total <- if | plannedCount   -> H.statement () explStm
+                              | estimatedCount -> if tableTotal > (fromIntegral <$> maxRows)
+                                                    then do estTotal <- H.statement () explStm
+                                                            pure $ if estTotal > tableTotal then estTotal else tableTotal
+                                                    else pure tableTotal
+                              | otherwise      -> pure tableTotal
+                  let (status, contentRange) = rangeStatusHeader topLevelRange queryTotal total
+                  return $
+                    if contentType == CTSingularJSON && queryTotal /= 1
+                      then errorResponseFor . singularityError $ queryTotal
+                      else responseLBS status
+                        ([toHeader contentType, contentRange, contentLocationH tName (iCanonicalQS apiRequest)] ++ gucsToHeaders hs)
+                        (if headersOnly then mempty else toS body)
 
         (ActionCreate, TargetIdent (QualifiedIdentifier tSchema tName), Just pJson) ->
           case mutateSqlParts tSchema tName of
@@ -159,7 +161,7 @@ app dbStructure proc cols conf apiRequest =
                     (contentType == CTSingularJSON) True
                     (contentType == CTTextCSV) (iPreferRepresentation apiRequest) pkCols
               row <- H.statement (toS $ pjRaw pJson) stm
-              let (_, queryTotal, fs, body) = row
+              let (_, queryTotal, fs, body, _) = row
                   headers = catMaybes [
                       if null fs
                         then Nothing
@@ -191,7 +193,7 @@ app dbStructure proc cols conf apiRequest =
                     (contentType == CTSingularJSON) False (contentType == CTTextCSV)
                     (iPreferRepresentation apiRequest) []
               row <- H.statement (toS $ pjRaw pJson) stm
-              let (_, queryTotal, _, body) = row
+              let (_, queryTotal, _, body, _) = row
                   updateIsNoOp = S.null cols
                   contentRangeHeader = contentRangeH 0 (queryTotal - 1) $
                         if shouldCount then Just queryTotal else Nothing
@@ -228,7 +230,7 @@ app dbStructure proc cols conf apiRequest =
                 row <- H.statement (toS pjRaw) $
                        createWriteStatement sq mq (contentType == CTSingularJSON) False
                                             (contentType == CTTextCSV) (iPreferRepresentation apiRequest) []
-                let (_, queryTotal, _, body) = row
+                let (_, queryTotal, _, body, _) = row
                 -- Makes sure the querystring pk matches the payload pk
                 -- e.g. PUT /items?id=eq.1 { "id" : 1, .. } is accepted, PUT /items?id=eq.14 { "id" : 2, .. } is rejected
                 -- If this condition is not satisfied then nothing is inserted, check the WHERE for INSERT in QueryBuilder.hs to see how it's done
@@ -250,7 +252,7 @@ app dbStructure proc cols conf apiRequest =
                     (contentType == CTTextCSV)
                     (iPreferRepresentation apiRequest) []
               row <- H.statement mempty stm
-              let (_, queryTotal, _, body) = row
+              let (_, queryTotal, _, body, _) = row
                   contentRangeHeader = contentRangeH 1 0 $
                         if shouldCount then Just queryTotal else Nothing
               if contentType == CTSingularJSON
@@ -294,7 +296,7 @@ app dbStructure proc cols conf apiRequest =
                       HT.condemn
                       return . errorResponseFor . singularityError $ queryTotal
                     else
-                      return $ responseLBS status ([toHeader contentType, contentRange] ++ toHeaders hs)
+                      return $ responseLBS status ([toHeader contentType, contentRange] ++ gucsToHeaders hs)
                       (if invMethod == InvHead then mempty else toS body)
 
         (ActionInspect headersOnly, TargetDefaultSpec tSchema, Nothing) -> do
