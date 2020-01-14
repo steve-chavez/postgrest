@@ -166,29 +166,29 @@ app dbStructure proc cols conf apiRequest =
                     (contentType == CTSingularJSON) True
                     (contentType == CTTextCSV) (iPreferRepresentation apiRequest) pkCols
               row <- H.statement (toS $ pjRaw pJson) stm
-              let (_, queryTotal, fs, body, _) = row
-                  headers = catMaybes [
-                      if null fs
-                        then Nothing
-                        else Just $ locationH tName fs
-                    , if iPreferRepresentation apiRequest == Full
-                        then Just $ toHeader contentType
-                        else Nothing
-                    , Just $ contentRangeH 1 0 $
-                        if shouldCount then Just queryTotal else Nothing
-                    , if null pkCols && isNothing (iOnConflict apiRequest)
-                        then Nothing
-                        else (\x -> ("Preference-Applied", show x)) <$> iPreferResolution apiRequest
-                    ]
-              if contentType == CTSingularJSON
-                 && queryTotal /= 1
-                then do
-                  HT.condemn
-                  return . errorResponseFor . singularityError $ queryTotal
-              else
-                return . responseLBS status201 headers $
-                  if iPreferRepresentation apiRequest == Full
-                    then toS body else ""
+              let (_, queryTotal, fs, body, gucHeaders) = row
+              case gucHeaders of
+                Left _ -> return . errorResponseFor $ GucHeadersError
+                Right hdrs -> do
+                  let headers = catMaybes [
+                          if null fs
+                            then Nothing
+                            else Just $ locationH tName fs
+                        , if iPreferRepresentation apiRequest == Full
+                            then Just $ toHeader contentType
+                            else Nothing
+                        , Just $ contentRangeH 1 0 $
+                            if shouldCount then Just queryTotal else Nothing
+                        , if null pkCols && isNothing (iOnConflict apiRequest)
+                            then Nothing
+                            else (\x -> ("Preference-Applied", show x)) <$> iPreferResolution apiRequest
+                        ] ++ (gucHToHeader <$> hdrs)
+                  if contentType == CTSingularJSON && queryTotal /= 1
+                    then do
+                      HT.condemn
+                      return . errorResponseFor . singularityError $ queryTotal
+                    else
+                      return . responseLBS status201 headers $ if iPreferRepresentation apiRequest == Full then toS body else mempty
 
         (ActionUpdate, TargetIdent (QualifiedIdentifier tSchema tName), Just pJson) ->
           case mutateSqlParts tSchema tName of
@@ -198,24 +198,25 @@ app dbStructure proc cols conf apiRequest =
                     (contentType == CTSingularJSON) False (contentType == CTTextCSV)
                     (iPreferRepresentation apiRequest) []
               row <- H.statement (toS $ pjRaw pJson) stm
-              let (_, queryTotal, _, body, _) = row
-                  updateIsNoOp = S.null cols
-                  contentRangeHeader = contentRangeH 0 (queryTotal - 1) $
-                        if shouldCount then Just queryTotal else Nothing
-                  headers | iPreferRepresentation apiRequest == Full = [toHeader contentType, contentRangeHeader]
-                          | otherwise                                = [contentRangeHeader]
-                  status | queryTotal == 0 && not updateIsNoOp      = status404
-                         | iPreferRepresentation apiRequest == Full = status200
-                         | otherwise                                = status204
-              if contentType == CTSingularJSON
-                 && queryTotal /= 1
-                then do
-                  HT.condemn
-                  return . errorResponseFor . singularityError $ queryTotal
-                else
-                  return $ if iPreferRepresentation apiRequest == Full
-                    then responseLBS status headers (toS body)
-                    else responseLBS status headers mempty
+              let (_, queryTotal, _, body, gucHeaders) = row
+              case gucHeaders of
+                Left _ -> return . errorResponseFor $ GucHeadersError
+                Right hdrs -> do
+                  let
+                    updateIsNoOp = S.null cols
+                    status | queryTotal == 0 && not updateIsNoOp      = status404
+                           | iPreferRepresentation apiRequest == Full = status200
+                           | otherwise                                = status204
+                    contentRangeHeader = contentRangeH 0 (queryTotal - 1) $ if shouldCount then Just queryTotal else Nothing
+                    headers = [contentRangeHeader] ++
+                              [if iPreferRepresentation apiRequest == Full then toHeader contentType else mempty] ++
+                              (gucHToHeader <$> hdrs)
+                  if contentType == CTSingularJSON && queryTotal /= 1
+                    then do
+                      HT.condemn
+                      return . errorResponseFor . singularityError $ queryTotal
+                    else
+                      return . responseLBS status headers $ if iPreferRepresentation apiRequest == Full then toS body else mempty
 
         (ActionSingleUpsert, TargetIdent (QualifiedIdentifier tSchema tName), Just ProcessedJSON{pjRaw, pjType, pjKeys}) ->
           case mutateSqlParts tSchema tName of
@@ -235,18 +236,20 @@ app dbStructure proc cols conf apiRequest =
                 row <- H.statement (toS pjRaw) $
                        createWriteStatement sq mq (contentType == CTSingularJSON) False
                                             (contentType == CTTextCSV) (iPreferRepresentation apiRequest) []
-                let (_, queryTotal, _, body, _) = row
-                -- Makes sure the querystring pk matches the payload pk
-                -- e.g. PUT /items?id=eq.1 { "id" : 1, .. } is accepted, PUT /items?id=eq.14 { "id" : 2, .. } is rejected
-                -- If this condition is not satisfied then nothing is inserted, check the WHERE for INSERT in QueryBuilder.hs to see how it's done
-                if queryTotal /= 1
-                  then do
-                    HT.condemn
-                    return . errorResponseFor $ PutMatchingPkError
-                  else
-                    return $ if iPreferRepresentation apiRequest == Full
-                      then responseLBS status200 [toHeader contentType] (toS body)
-                      else responseLBS status204 [] ""
+                let (_, queryTotal, _, body, gucHeaders) = row
+                case gucHeaders of
+                  Left _ -> return . errorResponseFor $ GucHeadersError
+                  Right hdrs -> do
+                    let headers = [toHeader contentType] ++ (gucHToHeader <$> hdrs)
+                    -- Makes sure the querystring pk matches the payload pk
+                    -- e.g. PUT /items?id=eq.1 { "id" : 1, .. } is accepted, PUT /items?id=eq.14 { "id" : 2, .. } is rejected
+                    -- If this condition is not satisfied then nothing is inserted, check the WHERE for INSERT in QueryBuilder.hs to see how it's done
+                    if queryTotal /= 1
+                      then do
+                        HT.condemn
+                        return . errorResponseFor $ PutMatchingPkError
+                      else
+                        return . responseLBS status200 headers $ if iPreferRepresentation apiRequest == Full then toS body else mempty
 
         (ActionDelete, TargetIdent (QualifiedIdentifier tSchema tName), Nothing) ->
           case mutateSqlParts tSchema tName of
@@ -257,18 +260,23 @@ app dbStructure proc cols conf apiRequest =
                     (contentType == CTTextCSV)
                     (iPreferRepresentation apiRequest) []
               row <- H.statement mempty stm
-              let (_, queryTotal, _, body, _) = row
-                  contentRangeHeader = contentRangeH 1 0 $
-                        if shouldCount then Just queryTotal else Nothing
-              if contentType == CTSingularJSON
-                 && queryTotal /= 1
-                then do
-                  HT.condemn
-                  return . errorResponseFor . singularityError $ queryTotal
-                else
-                  return $ if iPreferRepresentation apiRequest == Full
-                    then responseLBS status200 [toHeader contentType, contentRangeHeader] (toS body)
-                    else responseLBS status204 [contentRangeHeader] ""
+              let (_, queryTotal, _, body, gucHeaders) = row
+              case gucHeaders of
+                Left _ -> return . errorResponseFor $ GucHeadersError
+                Right hdrs -> do
+                  let
+                    status = if iPreferRepresentation apiRequest == Full then status200 else status204
+                    contentRangeHeader = contentRangeH 1 0 $ if shouldCount then Just queryTotal else Nothing
+                    headers = [contentRangeHeader] ++
+                              [if iPreferRepresentation apiRequest == Full then toHeader contentType else mempty] ++
+                              (gucHToHeader <$> hdrs)
+                  if contentType == CTSingularJSON
+                     && queryTotal /= 1
+                    then do
+                      HT.condemn
+                      return . errorResponseFor . singularityError $ queryTotal
+                    else
+                      return . responseLBS status headers $ if iPreferRepresentation apiRequest == Full then toS body else mempty
 
         (ActionInfo, TargetIdent (QualifiedIdentifier tSchema tTable), Nothing) ->
           let mTable = find (\t -> tableName t == tTable && tableSchema t == tSchema) (dbTables dbStructure) in
