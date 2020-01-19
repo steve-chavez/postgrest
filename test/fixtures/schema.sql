@@ -18,6 +18,8 @@ CREATE SCHEMA private;
 CREATE SCHEMA test;
 CREATE SCHEMA تست;
 CREATE SCHEMA extensions;
+CREATE SCHEMA v1;
+CREATE SCHEMA v2;
 
 --
 -- Name: plpgsql; Type: EXTENSION; Schema: -; Owner: -
@@ -1688,3 +1690,14 @@ begin
 end
 $$ language plpgsql security definer;
 create trigger location_for_stuff instead of insert on test.stuff for each row execute procedure test.location_for_stuff();
+
+-- tables to test multi schema access in one instance
+create table v1.table (
+  id    int primary key
+, value text
+);
+
+create table v2.table (
+  id    int primary key
+, value text
+);
