@@ -46,6 +46,7 @@ import qualified Feature.SingularSpec
 import qualified Feature.StructureSpec
 import qualified Feature.UnicodeSpec
 import qualified Feature.UpsertSpec
+import qualified Feature.MultipleSchemaSpec
 
 
 main :: IO ()
@@ -79,6 +80,7 @@ main = do
       rootSpecApp          = return $ postgrest (testCfgRootSpec testDbConn)          refDbStructure pool getTime $ pure ()
       htmlRawOutputApp     = return $ postgrest (testCfgHtmlRawOutput testDbConn)     refDbStructure pool getTime $ pure ()
       responseHeadersApp   = return $ postgrest (testCfgResponseHeaders testDbConn)   refDbStructure pool getTime $ pure ()
+      multipleSchemaApp    = return $ postgrest (testMultipleSchemaCfg testDbConn)    refDbStructure pool getTime $ pure ()
 
   let reset, analyze :: IO ()
       reset = resetDb testDbConn
@@ -170,3 +172,7 @@ main = do
         describe "Feature.RootSpec" Feature.RootSpec.spec
       before responseHeadersApp $
         describe "Feature.PgVersion96Spec" Feature.PgVersion96Spec.spec
+
+    -- this test runs with multiple schemas
+    before multipleSchemaApp $
+      describe "Feature.MultipleSchemaSpec" Feature.MultipleSchemaSpec.spec
