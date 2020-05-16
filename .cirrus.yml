@@ -4,9 +4,6 @@ freebsd_instance:
 build_task:
   env:
     ASSUME_ALWAYS_YES: YES
-  cabal_cache:
-    folder: ~/.cabal
-    fingerprint_script: cat postgrest.cabal
   install_script:
     ## TODO: Some of these workaround steps might be unneeded now
     ## gmake required, otherwise bsd make is used and some cryptic "No operator" errors are shown
@@ -19,6 +16,9 @@ build_task:
     - pkg install -y pkgconf
     - pkg install -y ghc
     - pkg install -y hs-cabal-install
+  cabal_cache:
+    folder: ~/.cabal
+    fingerprint_script: cat postgrest.cabal
   build_script:
     - cabal v2-update
     - cabal v2-build
