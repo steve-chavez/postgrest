@@ -4,17 +4,8 @@ freebsd_instance:
 build_task:
   env:
     ASSUME_ALWAYS_YES: YES
-  cabal_packages_cache:
-    folder: ~/.cabal/packages
-    reupload_on_changes: false
-    fingerprint_script: cat postgrest.cabal
-  cabal_store_cache:
-    folder: ~/.cabal/store
-    reupload_on_changes: false
-    fingerprint_script: cat postgrest.cabal
-  dist_cache:
-    folder: dist-newstyle
-    reupload_on_changes: false
+  cabal_cache:
+    folder: ~/.cabal
     fingerprint_script: cat postgrest.cabal
   install_script:
     ## TODO: Some of these workaround steps might be unneeded now
@@ -31,6 +22,9 @@ build_task:
   build_script:
     - cabal v2-update
     - cabal v2-build
+  cleanup_script:
+    - rm -rf ~/.cabal/logs
+    - rm  ~/.cabal/config
 
 publish_task:
   only_if: $CIRRUS_RELEASE != ""
