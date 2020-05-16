@@ -22,6 +22,11 @@ build_task:
   build_script:
     - cabal v2-update
     - cabal v2-build
+  binary_script:
+    - mkdir build
+    - cabal v2-install --installdir=build
+  binaries_artifacts:
+    path: build/
   cleanup_script:
     - rm -rf ~/.cabal/logs
     - rm  ~/.cabal/config
@@ -33,7 +38,7 @@ publish_task:
   depends_on:
     - build
   script:
-    - cabal v2-install --installdir=.
+    - wget https://api.cirrus-ci.com/v1/artifact/github/$CIRRUS_REPO_FULL_NAME/build/binaries/build/postgrest
     - tar cjf postgrest-$CIRRUS_TAG-freebsd.tar.xz postgrest
     ## The CIRRUS_RELEASE env var is not the same as the tag. It's an id for the release.
     - curl -X POST --data-binary @$NAME \
