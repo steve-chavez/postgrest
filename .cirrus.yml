@@ -2,7 +2,6 @@ freebsd_instance:
   image: freebsd-12-1-release-amd64
 
 build_task:
-  #only_if: $CIRRUS_BRANCH == 'master'
   env:
     ASSUME_ALWAYS_YES: YES
   cabal_packages_cache:
@@ -34,7 +33,7 @@ build_task:
     - cabal v2-build
 
 publish_task:
-  skip: $CIRRUS_RELEASE == ''
+  only_if: $CIRRUS_RELEASE != ""
   env:
     TOKEN: ENCRYPTED[c99babbf04e8a33962ffbbc75bf20d3abe408f9bede5ed5d8956cd24da6fdb34266c920984cc43f8106ef3423fba0e98]
     NAME: postgrest-$CIRRUS_TAG-freebsd.tar.xz
