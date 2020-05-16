@@ -24,7 +24,7 @@ build_task:
     - cabal v2-build
   binary_script:
     - mkdir build
-    - cabal v2-install --installdir=build
+    - cabal install --installdir=build
   binaries_artifacts:
     path: build/
   cleanup_script:
