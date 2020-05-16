@@ -27,14 +27,14 @@ build_task:
     - rm  ~/.cabal/config
 
 publish_task:
-  only_if: $CIRRUS_RELEASE != ""
+  skip: $CIRRUS_TAG == ""
   env:
     TOKEN: ENCRYPTED[c99babbf04e8a33962ffbbc75bf20d3abe408f9bede5ed5d8956cd24da6fdb34266c920984cc43f8106ef3423fba0e98]
-    NAME: postgrest-$CIRRUS_TAG-freebsd.tar.xz
   depends_on:
     - build
   script:
-    - tar cjf $NAME postgrest
+    - cabal v2-install --installdir=.
+    - tar cjf postgrest-$CIRRUS_TAG-freebsd.tar.xz postgrest
     ## The CIRRUS_RELEASE env var is not the same as the tag. It's an id for the release.
     - curl -X POST --data-binary @$NAME \
       -H "Authorization:token ${TOKEN}" \
