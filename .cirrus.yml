@@ -23,10 +23,12 @@ build_task:
     - cabal v2-update
     - cabal v2-build
   binary_script:
-    - mkdir build
-    - cabal install --installdir=build
+    - mkdir bin
+    # cabal v2-install --installdir=.
+    # the installdir option is not working on this cabal version(form hs-cabal-install), so the binary must be extrated from the path
+    - mv dist-newstyle/build/x86_64-freebsd/ghc-8.6.5/postgrest-7.0.1/x/postgrest/build/postgrest/postgrest bin
   binaries_artifacts:
-    path: build/
+    path: bin/
   cleanup_script:
     - rm -rf ~/.cabal/logs
     - rm  ~/.cabal/config
@@ -38,7 +40,8 @@ publish_task:
   depends_on:
     - build
   script:
-    - wget https://api.cirrus-ci.com/v1/artifact/github/$CIRRUS_REPO_FULL_NAME/build/binaries/build/postgrest
+    # https://cirrus-ci.org/guide/writing-tasks/#artifacts-instruction
+    - wget https://api.cirrus-ci.com/v1/artifact/github/$CIRRUS_REPO_FULL_NAME/build/binaries/bin/postgrest
     - tar cjf postgrest-$CIRRUS_TAG-freebsd.tar.xz postgrest
     ## The CIRRUS_RELEASE env var is not the same as the tag. It's an id for the release.
     - curl -X POST --data-binary @$NAME \
