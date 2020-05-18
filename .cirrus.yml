@@ -22,6 +22,8 @@ build_task:
   build_script:
     - cabal v2-update
     - cabal v2-build
+  binaries_artifacts:
+    path: /tmp/cirrus-ci-build/dist-newstyle/build/x86_64-freebsd/ghc-8.6.5/postgrest-7.0.1/x/postgrest/build/postgrest/postgrest
   #binary_script:
     #- mkdir bin
     ## cabal v2-install --installdir=.
