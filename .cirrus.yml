@@ -26,7 +26,8 @@ build_task:
     - mkdir bin
     # cabal v2-install --installdir=.
     # the installdir option is not working on this cabal version(form hs-cabal-install), so the binary must be extrated from the path
-    - mv dist-newstyle/build/x86_64-freebsd/ghc-8.6.5/postgrest-7.0.1/x/postgrest/build/postgrest/postgrest bin
+    - ldd /tmp/cirrus-ci-build/dist-newstyle/build/x86_64-freebsd/ghc-8.6.5/postgrest-7.0.1/x/postgrest/build/postgrest/postgrest
+    - mv /tmp/cirrus-ci-build/dist-newstyle/build/x86_64-freebsd/ghc-8.6.5/postgrest-7.0.1/x/postgrest/build/postgrest/postgrest bin/
   binaries_artifacts:
     path: bin/
   cleanup_script:
