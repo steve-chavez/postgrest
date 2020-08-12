@@ -20,6 +20,7 @@ This project adheres to [Semantic Versioning](http://semver.org/).
  - #1094, Fix expired JWTs starting an empty transaction on the db - @steve-chavez
  - #1475, Fix location header for POST request with select= without PK (#1162) - @wolfgangwalther
  - #1599, Fix error messages on connection failure for localized postgres on Windows (#1585) - @wolfgangwalther
+ - #1582, Fix `application/octet-stream` appending `charset=utf-8` - @steve-chavez
 
 ### Changed
 
