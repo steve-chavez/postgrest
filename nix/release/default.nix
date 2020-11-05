@@ -10,7 +10,7 @@
 }:
 let
   # Version from the postgrest.cabal file (gotten with callCabal2nix).
-  version = postgrest.version;
+  version = "nightly";
 
   # Set of files that will be published in the GitHub release.
   releaseFiles =
@@ -21,7 +21,7 @@ let
 
         mkdir -p $out
 
-        tar cvJf "$out"/postgrest-v"$version"-linux-x64-static.tar.xz \
+        tar cvJf "$out"/postgrest-"$version"-linux-x64-static.tar.xz \
           -C "$postgrest"/bin postgrest
       '';
 
@@ -31,14 +31,14 @@ let
       ''
         set -euo pipefail
 
-        changes="$(sed -n "1,/${version}/d;/## \[/q;p" ${../../CHANGELOG.md})"
+        changes="For the latest additions, check the [CHANGELOG](https://github.com/PostgREST/postgrest/blob/master/CHANGELOG.md#unreleased)."
 
         ${ghr}/bin/ghr \
           -t "$GITHUB_TOKEN" \
           -u "$GITHUB_USERNAME" \
           -r "$GITHUB_REPONAME" \
           -b "$changes" \
-          --replace v${version} \
+          --replace ${version} \
           ${releaseFiles}
       '';
 
@@ -50,11 +50,9 @@ let
 
         docker load -i ${docker.image}
 
-        docker tag postgrest:latest "$DOCKER_REPO"/postgrest:latest
-        docker tag postgrest:latest "$DOCKER_REPO"/postgrest:v${version}
+        docker tag postgrest:nightly "$DOCKER_REPO"/postgrest:nightly
 
-        docker push "$DOCKER_REPO"/postgrest:latest
-        docker push "$DOCKER_REPO"/postgrest:v${version}
+        docker push "$DOCKER_REPO"/postgrest:nightly
       '';
 
   # Script for updating the repository description on Docker Hub.

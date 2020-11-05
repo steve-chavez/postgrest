@@ -116,6 +116,33 @@ jobs:
             test/create_test_db "postgres://circleci@localhost" postgrest_test
             test/memory-tests.sh
 
+  nightly:
+    docker:
+      - image: nixos/nix:2.3
+    steps:
+      - checkout
+      - run:
+          name: Install and use the Cachix binary cache
+          command: |
+            nix-env -iA cachix -f https://cachix.org/api/v1/install
+            cachix use postgrest
+      - run:
+          name: Install release scripts
+          command: nix-env -f default.nix -iA release
+      - run:
+          name: Publish GitHub release
+          command: |
+            export GITHUB_USERNAME="$CIRCLE_PROJECT_USERNAME"
+            export GITHUB_REPONAME="$CIRCLE_PROJECT_REPONAME"
+            postgrest-release-github
+      - setup_remote_docker
+      - run:
+          name: Publish Docker images
+          command: |
+            export DOCKER_REPO=stevechavez
+            docker login -u $DOCKER_USER -p $DOCKER_PASS
+            postgrest-release-dockerhub
+
   # Publish a new release. This only runs when a release is tagged (see
   # workflow below).
   release:
@@ -231,6 +258,15 @@ workflows:
             tags:
               only: /v[0-9]+(\.[0-9]+)*/
       - nix-build-test:
+          filters:
+            tags:
+              only: /v[0-9]+(\.[0-9]+)*/
+      - nightly:
+          requires:
+            - style-check
+            - stack-test
+            - stack-test-memory
+            - nix-build-test
           filters:
             tags:
               only: /v[0-9]+(\.[0-9]+)*/
