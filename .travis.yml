@@ -54,24 +54,26 @@ jobs:
           if test ! "$TRAVIS_TAG"
           then
             echo 'No tag pushed. Skipping release.'
-          elif test $TRAVIS_TAG = "nightly"
-          then
-            DATE=$(date +'%F')
-            SHA=$(echo $TRAVIS_COMMIT | head -c7)
-            SUFFIX=$DATE-$SHA
-            echo $SUFFIX
-            strip postgrest
-            tar cJf postgrest-nightly-$SUFFIX-osx.tar.xz postgrest
-            ghr -t $GITHUB_TOKEN -u $OWNER -r $REPO --replace nightly postgrest-nightly-$SUFFIX-osx.tar.xz
           else
             OWNER="$(echo "$TRAVIS_REPO_SLUG" | cut -f1 -d/)"
             REPO="$(echo "$TRAVIS_REPO_SLUG" | cut -f2 -d/)"
-            START=$TRAVIS_TAG
-            END='## \['
-            BODY=$(sed -n "1,/$START/d;/$END/q;p" CHANGELOG.md)
-            strip postgrest
-            tar cJf postgrest-$TRAVIS_TAG-osx.tar.xz postgrest
-            ghr -t $GITHUB_TOKEN -u $OWNER -r $REPO -b "$BODY"--replace $TRAVIS_TAG postgrest-$TRAVIS_TAG-osx.tar.xz
+            if test $TRAVIS_TAG = "nightly"
+            then
+              DATE=$(date +'%F')
+              SHA=$(echo $TRAVIS_COMMIT | head -c7)
+              SUFFIX=$DATE-$SHA
+              echo $SUFFIX
+              strip postgrest
+              tar cJf postgrest-nightly-$SUFFIX-osx.tar.xz postgrest
+              ghr -t $GITHUB_TOKEN -u $OWNER -r $REPO --replace nightly postgrest-nightly-$SUFFIX-osx.tar.xz
+            else
+              START=$TRAVIS_TAG
+              END='## \['
+              BODY=$(sed -n "1,/$START/d;/$END/q;p" CHANGELOG.md)
+              strip postgrest
+              tar cJf postgrest-$TRAVIS_TAG-osx.tar.xz postgrest
+              ghr -t $GITHUB_TOKEN -u $OWNER -r $REPO -b "$BODY"--replace $TRAVIS_TAG postgrest-$TRAVIS_TAG-osx.tar.xz
+            fi
           fi
 
     - name: Code Coverage
