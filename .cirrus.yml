@@ -2,6 +2,8 @@ freebsd_instance:
   image: freebsd-12-1-release-amd64
 
 build_task:
+  env:
+    TOKEN: ENCRYPTED[e74d8ba7ae5df5d0a5a5ed3bf709ff7ff2557a39636d76c1e969dc19cdae263d326f323d77f4f4ad72f8496381f14182]
   # caches the freebsd package downloads
   # saves probably just a couple of seconds, but hey...
   pkg_cache:
@@ -9,7 +11,7 @@ build_task:
 
   install_script:
     - pkg install -y postgresql95-client ghc hs-cabal-install
-  
+
   # cache the hackage index file and downloads which are
   # cabal v2-update downloads an incremental update, so we don't need to keep this up2date
   packages_cache:
@@ -29,5 +31,33 @@ build_task:
     - cabal v2-update
     - cabal v2-build
 
-  binaries_artifacts:
-    path: "dist-newstyle/build/x86_64-freebsd/ghc-8.6.5/postgrest-7.0.1/x/postgrest/build/postgrest/*"
+  publish_script:
+    - |
+      if test ! "$CIRRUS_TAG"
+      then
+        echo 'No tag pushed. Skip release.'
+      else
+        cabal v2-install
+
+        bin_name=""
+
+        if test $CIRRUS_TAG = "nightly"
+        then
+          date=$(date +'%F')
+          sha=$(echo $CIRRUS_CHANGE_IN_REPO | head -c7)
+          suffix=$date-$sha
+          bin_name=postgrest-nightly-$suffix-freebsd.tar.xz
+        else
+          bin_name=postgrest-$CIRRUS_TAG-freebsd.tar.xz
+        fi
+
+        tar cJf $bin_name -C /.cabal/bin postgrest
+
+        ## The CIRRUS_RELEASE env var is not the same as the tag. It's an id for the release.
+        ## Check https://cirrus-ci.org/guide/writing-tasks/#environment-variables
+        ## We don't use ghr here because currently it doesn't provide freebsd binaries: https://github.com/tcnksm/ghr/issues/127
+        curl -X POST --data-binary @$bin_name \
+          -H "Authorization:token $TOKEN" \
+          -H "Content-Type:application/octet-stream" \
+          "https://uploads.github.com/repos/$CIRRUS_REPO_FULL_NAME/releases/$CIRRUS_RELEASE/assets?name=$bin_name"
+      fi
