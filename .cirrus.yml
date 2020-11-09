@@ -51,11 +51,13 @@ build_task:
           bin_name=postgrest-$CIRRUS_TAG-freebsd.tar.xz
         fi
 
+        echo "Uploading $bin_name to gh release: $CIRRUS_RELEASE"
+
         tar cJf $bin_name -C /.cabal/bin postgrest
 
         ## The CIRRUS_RELEASE env var is not the same as the tag. It's an id for the release.
         ## Check https://cirrus-ci.org/guide/writing-tasks/#environment-variables
-        ## We don't use ghr here because currently it doesn't provide freebsd binaries: https://github.com/tcnksm/ghr/issues/127
+        ## We don't use ghr here because it doesn't provide freebsd binaries: https://github.com/tcnksm/ghr/issues/127
         curl -X POST --data-binary @$bin_name \
           -H "Authorization:token $TOKEN" \
           -H "Content-Type:application/octet-stream" \
