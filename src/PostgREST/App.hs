@@ -64,8 +64,8 @@ import PostgREST.Types
 import Protolude                  hiding (Proxy, intercalate, toS)
 import Protolude.Conv             (toS)
 
-postgrest :: LogLevel -> IORef AppConfig -> IORef (Maybe DbStructure) -> P.Pool -> IO UTCTime -> IO () -> Application
-postgrest logLev refConf refDbStructure pool getTime connWorker =
+postgrest :: LogLevel -> TxEnd -> IORef AppConfig -> IORef (Maybe DbStructure) -> P.Pool -> IO UTCTime -> IO () -> Application
+postgrest logLev txEnd refConf refDbStructure pool getTime connWorker =
   pgrstMiddleware logLev $ \ req respond -> do
     time <- getTime
     body <- strictRequestBody req
@@ -86,15 +86,23 @@ postgrest logLev refConf refDbStructure pool getTime connWorker =
                 Right claims -> do
                   let
                     authed = containsRole claims
-                    shouldCommit   = configTxAllowOverride conf && iPreferTransaction apiRequest == Just Commit
-                    shouldRollback = configTxAllowOverride conf && iPreferTransaction apiRequest == Just Rollback
-                    preferenceApplied
-                      | shouldCommit    = addHeadersIfNotIncluded [(hPreferenceApplied, BS.pack (show Commit))]
-                      | shouldRollback  = addHeadersIfNotIncluded [(hPreferenceApplied, BS.pack (show Rollback))]
-                      | otherwise       = identity
-                    handleReq = do
-                      when (shouldRollback || (configTxRollbackAll conf && not shouldCommit)) HT.condemn
-                      mapResponseHeaders preferenceApplied <$> runPgLocals conf claims (app dbStructure conf) apiRequest
+                    handleReq =
+                      case txEnd of
+                        EndCommit -> runPgLocals conf claims (app dbStructure conf) apiRequest
+                        EndRollback -> HT.condemn >> runPgLocals conf claims (app dbStructure conf) apiRequest
+                        EndCommitOverride
+                          | iPreferTransaction apiRequest == Just Rollback -> do
+                            HT.condemn
+                            mapResponseHeaders (addHeadersIfNotIncluded [(hPreferenceApplied, BS.pack (show Rollback))]) <$>
+                              runPgLocals conf claims (app dbStructure conf) apiRequest
+                          | otherwise -> runPgLocals conf claims (app dbStructure conf) apiRequest
+                        EndRollbackOverride
+                          | iPreferTransaction apiRequest == Just Commit ->
+                            mapResponseHeaders (addHeadersIfNotIncluded [(hPreferenceApplied, BS.pack (show Commit))]) <$>
+                              runPgLocals conf claims (app dbStructure conf) apiRequest
+                          | otherwise -> do
+                            HT.condemn
+                            runPgLocals conf claims (app dbStructure conf) apiRequest
                   dbResp <- P.use pool $ HT.transaction HT.ReadCommitted (txMode apiRequest) handleReq
                   return $ either (errorResponseFor . PgError authed) identity dbResp
         -- Launch the connWorker when the connection is down. The postgrest function can respond successfully(with a stale schema cache) before the connWorker is done.

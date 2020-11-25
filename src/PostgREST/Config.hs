@@ -59,7 +59,7 @@ import PostgREST.Auth             (parseSecret)
 import PostgREST.Parsers          (pRoleClaimKey)
 import PostgREST.Private.ProxyUri (isMalformedProxyUri)
 import PostgREST.Types            (JSPath, JSPathExp (..),
-                                   LogLevel (..))
+                                   LogLevel (..), TxEnd (..))
 import Protolude                  hiding (concat, hPutStrLn,
                                    intercalate, null, replace, take,
                                    toS, (<>))
@@ -98,8 +98,7 @@ data AppConfig = AppConfig {
 
   , configLogLevel          :: LogLevel
 
-  , configTxRollbackAll     :: Bool
-  , configTxAllowOverride   :: Bool
+  , configTxEnd             :: TxEnd
 
   , configDbPrepared        :: Bool
   }
@@ -267,8 +266,7 @@ readAppConfig cfgPath = do
         <*> (maybe [] (fmap encodeUtf8 . splitOnCommas) <$> optValue "raw-media-types")
         <*> pure Nothing
         <*> parseLogLevel "log-level"
-        <*> parseTxEnd "db-tx-end" fst
-        <*> parseTxEnd "db-tx-end" snd
+        <*> parseTxEnd "db-tx-end"
         <*> (fromMaybe True <$>  optBool "db-prepared-statements")
 
     parseSocketFileMode :: C.Key -> C.Parser C.Config (Either Text FileMode)
@@ -304,16 +302,15 @@ readAppConfig cfgPath = do
         Just "info"  -> pure LogInfo
         Just _       -> fail "Invalid logging level. Check your configuration."
 
-    parseTxEnd :: C.Key -> ((Bool, Bool) -> Bool) -> C.Parser C.Config Bool
-    parseTxEnd k f =
+    parseTxEnd :: C.Key -> C.Parser C.Config TxEnd
+    parseTxEnd k =
       C.optional k C.string >>= \case
-        --                                          RollbackAll AllowOverride
-        Nothing                        -> pure $ f (False,      False)
-        Just ""                        -> pure $ f (False,      False)
-        Just "commit"                  -> pure $ f (False,      False)
-        Just "commit-allow-override"   -> pure $ f (False,      True)
-        Just "rollback"                -> pure $ f (True,       False)
-        Just "rollback-allow-override" -> pure $ f (True,       True)
+        Nothing                        -> pure EndCommit
+        Just ""                        -> pure EndCommit
+        Just "commit"                  -> pure EndCommit
+        Just "commit-allow-override"   -> pure EndCommitOverride
+        Just "rollback"                -> pure EndRollback
+        Just "rollback-allow-override" -> pure EndRollbackOverride
         Just _                         -> fail "Invalid transaction termination. Check your configuration."
 
     reqString :: C.Key -> C.Parser C.Config Text
