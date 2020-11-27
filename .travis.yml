@@ -79,49 +79,44 @@ jobs:
             fi
           fi
 
-    - name: Code Coverage
+    - name: Build ARM Binary
       os: linux
       dist: focal
-      addons:
-        apt:
-          update: true
-          packages:
-            - postgresql-12
+      arch: arm64
       cache:
-        yarn: true
         timeout: 1000
         directories:
-          - $HOME/.local/bin
-          - $HOME/.stack
-          - .stack-work
-      before_install: |
-        export PATH="$PATH:$HOME/.local/bin:/usr/lib/postgresql/12/bin"
-      install: |
-        if [[ ! -f "$HOME/.local/bin/stack" ]]
-        then
-          travis_retry curl -L https://get.haskellstack.org/stable/linux-x86_64.tar.gz | tar xz --wildcards --strip-components=1 -C ~/.local/bin '*/stack'
-        fi
-        if [[ ! -f "$HOME/.local/bin/shc" ]]
-        then
-          travis_retry curl -L https://github.com/rubik/stack-hpc-coveralls/releases/download/v0.0.4.0/shc-linux-x64-8.0.1.tar.bz2 | tar -xj -C ~/.local/bin
-        fi
-        travis_wait stack --no-terminal setup
-        travis_wait stack --no-terminal install hpc
-      script: |
-        travis_wait 50 stack --no-terminal build --fast -j1 --coverage
-        travis_wait 50 stack --no-terminal build --fast -j1 --coverage --test --no-run-tests
-        test/with_tmp_db stack --no-terminal test --coverage
-        test/with_tmp_db stack --no-terminal exec test/io-tests.sh
-      after_script: |
-        export _HPC_DIR=$(stack path --local-hpc-root)
-        export _MIX_DIR=$(stack path --dist-dir)
-        export _PKG_NAME=$(stack exec -- ghc-pkg field postgrest key --simple-output)
-        # merge the results from `stack test` and the io tests and exclude Paths_postgrest
-        stack --no-terminal exec hpc -- sum --union --exclude=Paths_postgrest --output=/tmp/all.tix $_HPC_DIR/combined/all/all.tix test/io-tests/postgrest.tix
-        # fix a bug in stack-hpc-coveralls
-        mv $_MIX_DIR/hpc/Main.mix $_MIX_DIR/hpc/$_PKG_NAME/Main.mix
-        mv $_MIX_DIR/hpc/UnixSocket.mix $_MIX_DIR/hpc/$_PKG_NAME/UnixSocket.mix
-        sed -i -r "s/(Main|UnixSocket)/$_PKG_NAME\/\1/g" /tmp/all.tix
-        # upload to coveralls
-        mv /tmp/all.tix $_HPC_DIR/combined/all/all.tix
-        shc combined all
+          - $HOME/.cabal
+      install:
+        - sudo apt -y update
+        - sudo apt -y install cabal-install
+        - sudo apt -y install zlib1g-dev
+        - sudo apt -y install libpq-dev
+        - sudo apt -y install pkg-config
+        - sudo apt -y install jq ## only for the release
+      script:
+        - cabal v2-update
+        - travis_wait 30 timeout 1800 cabal v2-build || (($?==124))
+        - |
+          if test ! "$TRAVIS_TAG"
+          then
+            echo 'No tag pushed. Skipping release.'
+          else
+            cabal v2-install exe:postgrest
+            bin_name=""
+            if test $TRAVIS_TAG = "nightly"
+            then
+              suffix=$(git show -s --format="%cd-%h" --date="format:%Y-%m-%d-%H-%M")
+              bin_name=postgrest-nightly-$suffix-aarch64-ubuntu.tar.xz
+            else
+              bin_name=postgrest-$TRAVIS_TAG-aarch64-ubuntu.tar.xz
+            fi
+            release_id=$(curl -s https://api.github.com/repos/$TRAVIS_REPO_SLUG/releases/tags/$TRAVIS_TAG | jq .id)
+            echo "Uploading $bin_name to gh release: $release_id"
+            strip postgrest
+            tar cvJf $bin_name --dereference -C $HOME/.cabal/bin postgrest
+            curl -X POST --data-binary @$bin_name \
+              -H "Authorization:token $TOKEN" \
+              -H "Content-Type:application/octet-stream" \
+              "https://uploads.github.com/repos/$TRAVIS_REPO_SLUG/releases/$release_id/assets?name=$bin_name"
+          fi
