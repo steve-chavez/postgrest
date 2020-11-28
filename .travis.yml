@@ -93,7 +93,7 @@ jobs:
         - sudo apt -y install zlib1g-dev
         - sudo apt -y install libpq-dev
         - sudo apt -y install pkg-config
-        - sudo apt -y install jq ## only for the release
+        - sudo apt -y install jq ## only used for the release
       script:
         - cabal v2-update
         - travis_wait 30 timeout 1800 cabal v2-build || (($?==124))
