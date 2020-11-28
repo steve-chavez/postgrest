@@ -89,6 +89,7 @@ jobs:
           - $HOME/.cabal
       install:
         - sudo apt -y update
+        - sudo apt -y install ghc
         - curl -L https://nixos.org/nix/install | sh
         - . /home/travis/.nix-profile/etc/profile.d/nix.sh
         - nix-env -i cabal-install # don't use apt -y install cabal-install, ubuntu cabal uses an outdated version that has a bug https://github.com/haskell/cabal/issues/6222
