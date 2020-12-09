@@ -248,6 +248,8 @@ connectionStatus pool =
 fillSchemaCache :: P.Pool -> PgVersion -> IORef AppConfig -> IORef (Maybe DbStructure) -> IO ()
 fillSchemaCache pool actualPgVersion refConf refDbStructure = do
   conf <- readIORef refConf
+  putStrLn ("Sleeping for 5 seconds. Kill the pg server during this time to see the error." :: Text)
+  threadDelay 5000000
   result <- P.use pool $ HT.transaction HT.ReadCommitted HT.Read $ getDbStructure (toList $ configDbSchemas conf) (configDbExtraSearchPath conf) actualPgVersion (configDbPreparedStatements conf)
   case result of
     Left e -> do
