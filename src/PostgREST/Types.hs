@@ -580,3 +580,5 @@ instance Show LogLevel where
   show LogError = "error"
   show LogWarn  = "warn"
   show LogInfo  = "info"
+
+data TxEnd = EndCommit | EndRollback | EndCommitOverride | EndRollbackOverride deriving (Eq, Show)

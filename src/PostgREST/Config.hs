@@ -70,7 +70,7 @@ import PostgREST.Auth             (parseSecret)
 import PostgREST.Parsers          (pRoleClaimKey)
 import PostgREST.Private.ProxyUri (isMalformedProxyUri)
 import PostgREST.Types            (JSPath, JSPathExp (..),
-                                   LogLevel (..))
+                                   LogLevel (..), TxEnd (..))
 import Protolude                  hiding (concat, filter, hPutStrLn,
                                    intercalate, null, replace, take,
                                    toList, toLower, toS, toTitle,
@@ -102,8 +102,7 @@ data AppConfig = AppConfig {
   , configDbPreparedStatements  :: Bool
   , configDbRootSpec            :: Maybe Text
   , configDbSchemas             :: NonEmpty Text
-  , configDbTxAllowOverride     :: Bool
-  , configDbTxRollbackAll       :: Bool
+  , configDbTxEnd               :: TxEnd
   , configDbUri                 :: Text
   , configJWKS                  :: Maybe JWKSet
   , configJwtAudience           :: Maybe StringOrURI
@@ -282,7 +281,7 @@ dumpAppConfig conf =
       ,("db-prepared-statements",        toLower . show . configDbPreparedStatements)
       ,("db-root-spec",              q . fromMaybe mempty . configDbRootSpec)
       ,("db-schemas",                q . intercalate "," . toList . configDbSchemas)
-      ,("db-tx-end",                 q . showTxEnd)
+      ,("db-tx-end",                 q . showTxEnd . configDbTxEnd)
       ,("db-uri",                    q . configDbUri)
       ,("jwt-aud",                       toS . encode . maybe "" toJSON . configJwtAudience)
       ,("jwt-role-claim-key",        q . intercalate mempty . fmap show . fromRight' . configJwtRoleClaimKey)
@@ -303,11 +302,11 @@ dumpAppConfig conf =
     -- quote strings and replace " with \"
     q s = "\"" <> replace "\"" "\\\"" s <> "\""
 
-    showTxEnd c = case (configDbTxRollbackAll c, configDbTxAllowOverride c) of
-      ( False, False ) -> "commit"
-      ( False, True  ) -> "commit-allow-override"
-      ( True , False ) -> "rollback"
-      ( True , True  ) -> "rollback-allow-override"
+    showTxEnd = \case
+      EndCommit           -> "commit"
+      EndCommitOverride   -> "commit-allow-override"
+      EndRollback         -> "rollback"
+      EndRollbackOverride -> "rollback-allow-override"
     showJwtSecret c
       | configJwtSecretIsBase64 c = B64.encode secret
       | otherwise                 = toS secret
@@ -364,8 +363,7 @@ readAppConfig env optPath = do
         <*> (fromList . splitOnCommas <$> reqWithAlias (optValue "db-schemas")
                                                        (optValue "db-schema")
                                                        "missing key: either db-schemas or db-schema must be set")
-        <*> parseTxEnd "db-tx-end" snd
-        <*> parseTxEnd "db-tx-end" fst
+        <*> parseTxEnd "db-tx-end"
         <*> reqString "db-uri"
         <*> pure Nothing
         <*> parseJwtAudience "jwt-aud"
@@ -434,16 +432,15 @@ readAppConfig env optPath = do
         Just "info"  -> pure LogInfo
         Just _       -> fail "Invalid logging level. Check your configuration."
 
-    parseTxEnd :: C.Key -> ((Bool, Bool) -> Bool) -> C.Parser C.Config Bool
-    parseTxEnd k f =
+    parseTxEnd :: C.Key -> C.Parser C.Config TxEnd
+    parseTxEnd k =
       overrideFromEnvironment C.optional k coerceText >>= \case
-        --                                          RollbackAll AllowOverride
-        Nothing                        -> pure $ f (False,      False)
-        Just ""                        -> pure $ f (False,      False)
-        Just "commit"                  -> pure $ f (False,      False)
-        Just "commit-allow-override"   -> pure $ f (False,      True)
-        Just "rollback"                -> pure $ f (True,       False)
-        Just "rollback-allow-override" -> pure $ f (True,       True)
+        Nothing                        -> pure EndCommit
+        Just ""                        -> pure EndCommit
+        Just "commit"                  -> pure EndCommit
+        Just "commit-allow-override"   -> pure EndCommitOverride
+        Just "rollback"                -> pure EndRollback
+        Just "rollback-allow-override" -> pure EndRollbackOverride
         Just _                         -> fail "Invalid transaction termination. Check your configuration."
 
     reqWithAlias :: C.Parser C.Config (Maybe a) -> C.Parser C.Config (Maybe a) -> [Char] -> C.Parser C.Config a
