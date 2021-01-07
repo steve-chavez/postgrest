@@ -24,7 +24,7 @@ import Text.Heredoc
 
 import PostgREST.Auth   (parseSecret)
 import PostgREST.Config (AppConfig (..))
-import PostgREST.Types  (JSPathExp (..), LogLevel (..))
+import PostgREST.Types  (JSPathExp (..), LogLevel (..), TxEnd (..))
 import Protolude        hiding (toS)
 import Protolude.Conv   (toS)
 
@@ -91,18 +91,17 @@ _baseCfg = let secret = Just $ encodeUtf8 "reallyreallyreallyreallyverysafe" in
   , configServerPort            = 3000
   , configServerUnixSocket      = Nothing
   , configServerUnixSocketMode  = Right 432
-  , configDbTxAllowOverride     = True
-  , configDbTxRollbackAll       = True
+  , configDbTxEnd               = EndRollbackOverride
   }
 
 testCfg :: Text -> AppConfig
 testCfg testDbConn = _baseCfg { configDbUri = testDbConn }
 
 testCfgDisallowRollback :: Text -> AppConfig
-testCfgDisallowRollback testDbConn = (testCfg testDbConn) { configDbTxAllowOverride = False, configDbTxRollbackAll = False }
+testCfgDisallowRollback testDbConn = (testCfg testDbConn) { configDbTxEnd = EndCommit }
 
 testCfgForceRollback :: Text -> AppConfig
-testCfgForceRollback testDbConn = (testCfg testDbConn) { configDbTxAllowOverride = False, configDbTxRollbackAll = True }
+testCfgForceRollback testDbConn = (testCfg testDbConn) { configDbTxEnd = EndRollback }
 
 testCfgNoJWT :: Text -> AppConfig
 testCfgNoJWT testDbConn = (testCfg testDbConn) { configJwtSecret = Nothing, configJWKS = Nothing }

@@ -175,7 +175,7 @@ shouldNotPersistMutations reqHeaders respHeaders = do
         [json|[{"id":1}]|]
 
 allowed :: SpecWith ((), Application)
-allowed = describe "tx-allow-override = true" $ do
+allowed = describe "overriding transaction end" $ do
   describe "without Prefer tx" $ do
     preferDefault `shouldRespondToReads` withoutPreferenceApplied
     preferDefault `shouldNotPersistMutations` withoutPreferenceApplied
@@ -189,7 +189,7 @@ allowed = describe "tx-allow-override = true" $ do
     preferRollback `shouldNotPersistMutations` withPreferenceRollbackApplied
 
 disallowed :: SpecWith ((), Application)
-disallowed = describe "tx-rollback-all = false, tx-allow-override = false" $ do
+disallowed = describe "commit without override" $ do
   describe "without Prefer tx" $ do
     preferDefault `shouldRespondToReads` withoutPreferenceApplied
     preferDefault `shouldPersistMutations` withoutPreferenceApplied
@@ -204,7 +204,7 @@ disallowed = describe "tx-rollback-all = false, tx-allow-override = false" $ do
 
 
 forced :: SpecWith ((), Application)
-forced = describe "tx-rollback-all = true, tx-allow-override = false" $ do
+forced = describe "rollback without override" $ do
   describe "without Prefer tx" $ do
     preferDefault `shouldRespondToReads` withoutPreferenceApplied
     preferDefault `shouldNotPersistMutations` withoutPreferenceApplied

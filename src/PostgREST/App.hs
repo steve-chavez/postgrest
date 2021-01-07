@@ -84,22 +84,47 @@ postgrest logLev refConf refDbStructure pool getTime connWorker =
               case jwtClaims attempt of
                 Left errJwt -> return . errorResponseFor $ errJwt
                 Right claims -> do
-                  let
-                    authed = containsRole claims
-                    shouldCommit   = configDbTxAllowOverride conf && iPreferTransaction apiRequest == Just Commit
-                    shouldRollback = configDbTxAllowOverride conf && iPreferTransaction apiRequest == Just Rollback
-                    preferenceApplied
-                      | shouldCommit    = addHeadersIfNotIncluded [(hPreferenceApplied, BS.pack (show Commit))]
-                      | shouldRollback  = addHeadersIfNotIncluded [(hPreferenceApplied, BS.pack (show Rollback))]
-                      | otherwise       = identity
-                    handleReq = do
-                      when (shouldRollback || (configDbTxRollbackAll conf && not shouldCommit)) HT.condemn
-                      mapResponseHeaders preferenceApplied <$> runPgLocals conf claims (app dbStructure conf) apiRequest
-                  dbResp <- P.use pool $ HT.transaction HT.ReadCommitted (txMode apiRequest) handleReq
-                  return $ either (errorResponseFor . PgError authed) identity dbResp
+                  dbResp <- P.use pool .
+                    HT.transaction HT.ReadCommitted (txMode apiRequest) .
+                    optionalRollback conf apiRequest $
+                    runPgLocals conf claims (app dbStructure conf) apiRequest
+                  return $ either (errorResponseFor . PgError (containsRole claims)) identity dbResp
         -- Launch the connWorker when the connection is down. The postgrest function can respond successfully(with a stale schema cache) before the connWorker is done.
         when (responseStatus response == status503) connWorker
         respond response
+
+optionalRollback
+  :: AppConfig
+  -> ApiRequest
+  -> HT.Transaction Response
+  -> HT.Transaction Response
+optionalRollback conf apiRequest tx =
+  let
+    isOverridable = configDbTxEnd conf `elem` [EndCommitOverride, EndRollbackOverride]
+
+    commitOverride =
+      isOverridable &&
+      iPreferTransaction apiRequest == Just Commit
+
+    rollbackOverride =
+      isOverridable &&
+      iPreferTransaction apiRequest == Just Rollback
+
+    preferenceApplied
+      | commitOverride =
+          addHeadersIfNotIncluded
+            [(hPreferenceApplied, BS.pack (show Commit))]
+      | rollbackOverride =
+          addHeadersIfNotIncluded
+            [(hPreferenceApplied, BS.pack (show Rollback))]
+      | otherwise =
+          identity
+  in
+  do
+    when (rollbackOverride || configDbTxEnd conf == EndRollback || configDbTxEnd conf == EndRollbackOverride && not commitOverride)
+      HT.condemn
+
+    mapResponseHeaders preferenceApplied <$> tx
 
 txMode :: ApiRequest -> HT.Mode
 txMode apiRequest =
