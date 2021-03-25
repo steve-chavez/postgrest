@@ -22,6 +22,11 @@ PostgREST ongoing development is only possible thanks to our Sponsors and Backer
           <img width="222px" src="static/retool.png">
         </a>
       </td>
+      <td align="center" valign="middle">
+        <a href="https://supabase.io?utm_source=postgrest%20backers&utm_medium=open%20source%20partner&utm_campaign=postgrest%20backers%20github&utm_term=homepage" target="_blank">
+          <img width="222px" src="static/supabase.png">
+        </a>
+      </td>
     </tr>
   </tbody>
 </table>

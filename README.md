@@ -23,17 +23,25 @@ API than you are likely to write from scratch.
     <tr>
       <td align="center" valign="middle">
         <a href="https://www.cybertec-postgresql.com/en/" target="_blank">
-          <img width="222px" src="static/cybertec.png">
+          <img width="296px" src="static/cybertec.png">
         </a>
       </td>
       <td align="center" valign="middle">
         <a href="https://www.2ndquadrant.com/en/?utm_campaign=External%20Websites&utm_source=PostgREST&utm_medium=Logo" target="_blank">
-          <img width="222px" src="static/2ndquadrant.png">
+          <img width="296px" src="static/2ndquadrant.png">
         </a>
       </td>
       <td align="center" valign="middle">
         <a href="https://tryretool.com/?utm_source=sponsor&utm_campaign=postgrest" target="_blank">
-          <img width="222px" src="static/retool.png">
+          <img width="296px" src="static/retool.png">
+        </a>
+      </td>
+    </tr>
+    <tr></tr>
+    <tr>
+      <td align="center" valign="middle">
+        <a href="https://supabase.io?utm_source=postgrest%20backers&utm_medium=open%20source%20partner&utm_campaign=postgrest%20backers%20github&utm_term=homepage" target="_blank">
+          <img width="296px" src="static/supabase.png">
         </a>
       </td>
     </tr>
@@ -58,7 +66,7 @@ Latest documentation is at [postgrest.org](http://postgrest.org). You can contri
 ## Performance
 
 TLDR; subsecond response times for up to 2000 requests/sec on Heroku
-free tier. If you're used to servers written in interpreted languages, 
+free tier. If you're used to servers written in interpreted languages,
 prepare to be pleasantly surprised by PostgREST performance.
 
 Three factors contribute to the speed. First the server is written
