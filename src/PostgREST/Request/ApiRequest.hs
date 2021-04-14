@@ -309,14 +309,14 @@ userApiRequest conf@AppConfig{..} dbStructure req reqBody
   schema = fromMaybe defaultSchema profile
   target =
     let
-      callFindProc proc = findProc (QualifiedIdentifier schema proc) payloadColumns (hasPrefer (show SingleObject)) $ dbProcs dbStructure
+      callFindProc procSch procNam = findProc (QualifiedIdentifier procSch procNam) payloadColumns (hasPrefer (show SingleObject)) $ dbProcs dbStructure
     in
     case path of
       []             -> case configDbRootSpec of
-                        Just pName -> TargetProc (callFindProc pName) True
-                        Nothing    -> TargetDefaultSpec schema
+                          Just (QualifiedIdentifier pSch pName) -> TargetProc (callFindProc (if pSch == mempty then schema else pSch) pName) True
+                          Nothing                               -> TargetDefaultSpec schema
       [table]        -> TargetIdent $ QualifiedIdentifier schema table
-      ["rpc", pName] -> TargetProc (callFindProc pName) False
+      ["rpc", pName] -> TargetProc (callFindProc schema pName) False
       _              -> TargetUnknown
 
   shouldParsePayload = action `elem` [ActionCreate, ActionUpdate, ActionSingleUpsert, ActionInvoke InvPost]
