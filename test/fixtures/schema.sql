@@ -1746,6 +1746,10 @@ case current_setting('request.header.accept', true)
 end
 $_$ language plpgsql;
 
+create or replace function root_override() returns json as $$
+  select current_setting('request.spec', true)::json;
+$$ language sql;
+
 create or replace function welcome() returns text as $$
 select 'Welcome to PostgREST'::text;
 $$ language sql;
