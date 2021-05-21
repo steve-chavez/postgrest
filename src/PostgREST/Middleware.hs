@@ -40,7 +40,6 @@ import System.IO.Unsafe          (unsafePerformIO)
 import System.Log.FastLogger     (toLogStr)
 
 import PostgREST.Config             (AppConfig (..), LogLevel (..))
-import PostgREST.DbStructure        (DbStructure)
 import PostgREST.Error              (Error, errorResponseFor)
 import PostgREST.GucHeader          (addHeadersIfNotIncluded)
 import PostgREST.Query.SqlFragment  (fromQi, intercalateSnippet,
@@ -55,8 +54,8 @@ import Protolude.Conv (toS)
 -- | Runs local(transaction scoped) GUCs for every request, plus the pre-request function
 runPgLocals :: AppConfig   -> M.HashMap Text JSON.Value ->
                (ApiRequest -> ExceptT Error H.Transaction Wai.Response) ->
-               ApiRequest  -> DbStructure -> ExceptT Error H.Transaction Wai.Response
-runPgLocals conf claims app req dbs = do
+               ApiRequest  -> ByteString -> ExceptT Error H.Transaction Wai.Response
+runPgLocals conf claims app req jsonDbS = do
   lift $ H.statement mempty $ H.dynamicallyParameterized
     ("select " <> intercalateSnippet ", " (searchPathSql : roleSql ++ claimsSql ++ [methodSql, pathSql] ++ headersSql ++ cookiesSql ++ appSettingsSql ++ specSql))
     HD.noResult (configDbPreparedStatements conf)
@@ -78,7 +77,7 @@ runPgLocals conf claims app req dbs = do
       setConfigLocal mempty ("search_path", toS schemas)
     preReqSql = (\f -> "select " <> fromQi f <> "();") <$> configDbPreRequest conf
     specSql = case iTarget req of
-      TargetProc{tpIsRootSpec=True} -> [setConfigLocal mempty ("request.spec", toS $ JSON.encode dbs)]
+      TargetProc{tpIsRootSpec=True} -> [setConfigLocal mempty ("request.spec", jsonDbS)]
       _                             -> mempty
     -- | Do a pg set_config(setting, value, true) call. This is equivalent to a SET LOCAL.
     setConfigLocal :: ByteString -> (ByteString, ByteString) -> H.Snippet
