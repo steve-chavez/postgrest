@@ -173,8 +173,12 @@ loadSchemaCache appState = do
 
     Right dbStructure -> do
       AppState.putDbStructure appState dbStructure
-      when (isJust configDbRootSpec) $
-        AppState.putJsonDbS appState $ toS $ JSON.encode dbStructure
+      when (isJust configDbRootSpec) $ do
+        let jsch = toS $ JSON.encode dbStructure
+        putStrLn ("Converting schema cache to json" :: Text)
+        putStrLn jsch
+        AppState.putJsonDbS appState jsch
+        putStrLn ("Conversion done" :: Text)
       putStrLn ("Schema cache loaded" :: Text)
       return SCLoaded
 
