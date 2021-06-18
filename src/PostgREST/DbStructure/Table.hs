@@ -43,7 +43,7 @@ data Column = Column
   , colDefault     :: Maybe Text
   , colEnum        :: [Text]
   }
-  deriving (Ord, Generic, JSON.ToJSON)
+  deriving (Ord, Generic, JSON.ToJSON, Show)
 
 instance Eq Column where
   Column{colTable=t1,colName=n1} == Column{colTable=t2,colName=n2} = t1 == t2 && n1 == n2

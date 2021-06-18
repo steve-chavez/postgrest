@@ -29,7 +29,7 @@ data Relationship = Relationship
   , relForeignColumns :: [Column]
   , relCardinality    :: Cardinality
   }
-  deriving (Eq, Generic, JSON.ToJSON)
+  deriving (Eq, Show, Generic, JSON.ToJSON)
 
 -- | The relationship cardinality
 -- | https://en.wikipedia.org/wiki/Cardinality_(data_modeling)
@@ -38,7 +38,7 @@ data Cardinality
   = O2M FKConstraint -- ^ one-to-many cardinality
   | M2O FKConstraint -- ^ many-to-one cardinality
   | M2M Junction     -- ^ many-to-many cardinality
-  deriving (Eq, Generic, JSON.ToJSON)
+  deriving (Eq, Generic, JSON.ToJSON, Show)
 
 type FKConstraint = Text
 
@@ -50,7 +50,7 @@ data Junction = Junction
   , junConstraint2 :: FKConstraint
   , junColumns2    :: [Column]
   }
-  deriving (Eq, Generic, JSON.ToJSON)
+  deriving (Eq, Generic, JSON.ToJSON, Show)
 
 isSelfReference :: Relationship -> Bool
 isSelfReference r = relTable r == relForeignTable r

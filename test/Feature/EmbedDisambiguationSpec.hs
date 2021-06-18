@@ -99,7 +99,7 @@ spec =
 
       it "errs when there are more than two fks on a junction table(currently impossible to disambiguate, only choice is to split the table)" $
         -- We have 4 possibilities for doing the junction JOIN here.
-        -- This could be solved by specifying two additional fks, like whatev_projects!fk1!fk2(*)
+        -- This could be solved by specifying two additional fks, like whatev_projects!fk1,fk2(*)
         -- If the need arises this capability can be added later without causing a breaking change
         get "/whatev_sites?select=*,whatev_projects(*)" `shouldRespondWith`
           [json|

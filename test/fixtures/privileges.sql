@@ -149,6 +149,9 @@ GRANT ALL ON TABLE
     , schauspieler
     , filme
     , rollen
+    , posters
+    , posts
+    , subscriptions
 TO postgrest_test_anonymous;
 
 GRANT INSERT ON TABLE insertonly TO postgrest_test_anonymous;

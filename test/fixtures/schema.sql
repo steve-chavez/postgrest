@@ -2141,3 +2141,20 @@ create table private.rollen (
   foreign key (film_id) references test.filme(id),
   foreign key (rolle_id) references test.schauspieler(id)
 );
+
+create table test.posters(
+  id int primary key,
+  name text
+);
+
+create table posts(
+  id int primary key,
+  content text,
+  poster_id int references posters(id)
+);
+
+create table test.subscriptions(
+  subscriber int references test.posters(id),
+  subscribed int references test.posters(id),
+  primary key(subscriber, subscribed)
+);

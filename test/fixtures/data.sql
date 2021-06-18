@@ -663,3 +663,12 @@ INSERT INTO private.films (id, title) VALUES (12,'douze commandements'), (2001,'
 
 TRUNCATE TABLE private.personnages CASCADE;
 INSERT INTO private.personnages (film_id, role_id, character) VALUES (12,1,'méchant'), (2001,2,'astronaute');
+
+TRUNCATE TABLE test.posters CASCADE;
+INSERT INTO test.posters (id, name) VALUES (1,'poster-1'), (2, 'poster-2');
+
+TRUNCATE TABLE test.posts CASCADE;
+INSERT INTO test.posts (id, content, poster_id) VALUES (1,'post-1-1'), (2, 'poster-1-2');
+
+TRUNCATE TABLE test.subscriptions CASCADE;
+INSERT INTO test.subscriptions (subscriber, subscribed) VALUES (1,'post-1-1'), (2, 'poster-1-2');

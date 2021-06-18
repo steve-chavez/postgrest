@@ -152,7 +152,7 @@ findRel :: Schema -> [Relationship] -> NodeName -> NodeName -> Maybe EmbedHint -
 findRel schema allRels origin target hint =
   case rel of
     []  -> Left $ NoRelBetween origin target
-    [r] -> Right r
+    [r] -> Right $ traceShowId r
     -- Here we handle a self reference relationship to not cause a breaking
     -- change: In a self reference we get two relationships with the same
     -- foreign key and relTable/relFtable but with different
@@ -170,7 +170,7 @@ findRel schema allRels origin target hint =
       M2O cons -> tar == Just cons
       _        -> False
     matchJunction hint_ card = case card of
-      M2M Junction{junTable} -> hint_ == Just (tableName junTable)
+      M2M Junction{junTable, junConstraint2} -> hint_ == Just (tableName junTable) || hint_ == Just junConstraint2
       _                      -> False
     rel = filter (
       \Relationship{..} ->
@@ -216,8 +216,9 @@ addJoinConditions previousAlias (Node node@(query@Select{from=tbl}, nodeProps@(_
     Just r -> Node (augmentQuery r, nodeProps) <$> updatedForest
     Nothing -> Node node <$> updatedForest
   where
-    newAlias = case Relationship.isSelfReference <$> rel of
-      Just True
+    newAlias = case (Relationship.isSelfReference <$> rel, relCardinality <$> rel) of
+      (Just True, Just (M2M _)) -> Nothing
+      (Just True, _)
         | depth /= 0 -> Just (qiName tbl <> "_" <> show depth) -- root node doesn't get aliased
         | otherwise  -> Nothing
       _              -> Nothing
