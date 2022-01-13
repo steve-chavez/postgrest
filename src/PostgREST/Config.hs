@@ -46,7 +46,6 @@ import Data.List               (lookup)
 import Data.List.NonEmpty      (fromList, toList)
 import Data.Maybe              (fromJust)
 import Data.Scientific         (floatingOrInteger)
-import Data.Time.Clock         (NominalDiffTime)
 import Numeric                 (readOct, showOct)
 import System.Environment      (getEnvironment)
 import System.Posix.Types      (FileMode)
@@ -69,7 +68,7 @@ data AppConfig = AppConfig
   , configDbExtraSearchPath     :: [Text]
   , configDbMaxRows             :: Maybe Integer
   , configDbPoolSize            :: Int
-  , configDbPoolTimeout         :: NominalDiffTime
+  , configDbPoolTimeout         :: Double
   , configDbPreRequest          :: Maybe QualifiedIdentifier
   , configDbPreparedStatements  :: Bool
   , configDbRootSpec            :: Maybe QualifiedIdentifier

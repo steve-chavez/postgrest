@@ -59,6 +59,22 @@ let
           }
           { });
 
+     resource-pool =
+       prev.callCabal2nixWithOptions "resource-pool" (super.fetchFromGitHub {
+         owner = "scrive";
+         repo  = "pool";
+         rev = "b0cfae3591106e93752a8712a8ec8bc397dba820";
+         sha256 = "sha256-vOEfG1SVg7P7eKA29oWjNomzNZNKUycq8EMW6S9nwh8=";
+      }) "--subpath=." {};
+
+      hasql-notifications =
+        lib.dontCheck (prev.callCabal2nixWithOptions "hasql-notifications" (super.fetchFromGitHub {
+          owner = "steve-chavez";
+          repo  = "hasql-notifications";
+          rev = "5f97565238a7ac12635dce7df44da7e8010c4051";
+          sha256 = "sha256-GFlDxxK1KQ1YxwrcgnMHzQeFFBJY3HWGgnWFcd97xC0=";
+        }) "--subpath=." {});
+
       hasql-dynamic-statements =
         lib.dontCheck (lib.unmarkBroken prev.hasql-dynamic-statements);
 
