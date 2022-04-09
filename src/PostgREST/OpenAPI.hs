@@ -28,11 +28,10 @@ import Data.Swagger
 import PostgREST.Config                   (AppConfig (..), Proxy (..),
                                            isMalformedProxyUri, toURI)
 import PostgREST.DbStructure              (DbStructure (..),
-                                           tableCols, tablePKCols)
+                                           tableCols)
 import PostgREST.DbStructure.Proc         (ProcDescription (..),
                                            ProcParam (..))
 import PostgREST.DbStructure.Relationship (Cardinality (..),
-                                           PrimaryKey (..),
                                            Relationship (..))
 import PostgREST.DbStructure.Table        (Column (..), Table (..))
 import PostgREST.Version                  (docsVersion, prettyVersion)
@@ -50,7 +49,6 @@ encode conf dbStructure tables procs schemaDescription =
       (openApiTableInfo dbStructure <$> tables)
       (proxyUri conf)
       schemaDescription
-      (dbPrimaryKeys dbStructure)
 
 makeMimeList :: [ContentType] -> MimeList
 makeMimeList cs = MimeList $ fmap (fromString . BS.unpack . toMime) cs
@@ -81,25 +79,25 @@ parseDefault colType colDefault =
   where
     wrapInQuotations text = "\"" <> text <> "\""
 
-makeTableDef :: [Relationship] -> [PrimaryKey] -> (Table, [Column], [Text]) -> (Text, Schema)
-makeTableDef rels pks (t, cs, _) =
+makeTableDef :: [Relationship] -> (Table, [Column], [Text]) -> (Text, Schema)
+makeTableDef rels (t, cs, _) =
   let tn = tableName t in
       (tn, (mempty :: Schema)
         & description .~ tableDescription t
         & type_ ?~ SwaggerObject
-        & properties .~ fromList (fmap (makeProperty rels pks) cs)
+        & properties .~ fromList (fmap (makeProperty rels) cs)
         & required .~ fmap colName (filter (not . colNullable) cs))
 
-makeProperty :: [Relationship] -> [PrimaryKey] -> Column -> (Text, Referenced Schema)
-makeProperty rels pks c = (colName c, Inline s)
+makeProperty :: [Relationship] -> Column -> (Text, Referenced Schema)
+makeProperty rels col = (colName col, Inline s)
   where
-    e = if null $ colEnum c then Nothing else JSON.decode $ JSON.encode $ colEnum c
+    e = if null $ colEnum col then Nothing else JSON.decode $ JSON.encode $ colEnum col
     fk :: Maybe Text
     fk =
       let
         -- Finds the relationship that has a single column foreign key
         rel = find (\case
-          Relationship{relColumns, relCardinality=M2O _} -> [c] == relColumns
+          Relationship{relColumns, relCardinality=M2O _} -> [col] == relColumns
           _                                                 -> False
           ) rels
         fCol = colName <$> (headMay . relForeignColumns =<< rel)
@@ -108,7 +106,7 @@ makeProperty rels pks c = (colName c, Inline s)
       in
         (\(a, b) -> T.intercalate "" ["This is a Foreign Key to `", a, ".", b, "`.<fk table='", a, "' column='", b, "'/>"]) <$> fTblCol
     pk :: Bool
-    pk = any (\p -> pkTable p == colTable c && pkName p == colName c) pks
+    pk = any (\pkcol ->  pkcol == colName col) $ tablePKCols (colTable col)
     n = catMaybes
       [ Just "Note:"
       , if pk then Just "This is a Primary Key.<pk/>" else Nothing
@@ -116,17 +114,17 @@ makeProperty rels pks c = (colName c, Inline s)
       ]
     d =
       if length n > 1 then
-        Just $ T.append (maybe "" (`T.append` "\n\n") $ colDescription c) (T.intercalate "\n" n)
+        Just $ T.append (maybe "" (`T.append` "\n\n") $ colDescription col) (T.intercalate "\n" n)
       else
-        colDescription c
+        colDescription col
     s =
       (mempty :: Schema)
-        & default_ .~ (JSON.decode . toUtf8Lazy . parseDefault (colType c) =<< colDefault c)
+        & default_ .~ (JSON.decode . toUtf8Lazy . parseDefault (colType col) =<< colDefault col)
         & description .~ d
         & enum_ .~ e
-        & format ?~ colType c
-        & maxLength .~ (fromIntegral <$> colMaxLen c)
-        & type_ .~ toSwaggerType (colType c)
+        & format ?~ colType col
+        & maxLength .~ (fromIntegral <$> colMaxLen col)
+        & type_ .~ toSwaggerType (colType col)
 
 makeProcSchema :: ProcDescription -> Schema
 makeProcSchema pd =
@@ -322,8 +320,8 @@ escapeHostName "*6" = "0.0.0.0"
 escapeHostName "!6" = "0.0.0.0"
 escapeHostName h    = h
 
-postgrestSpec :: [Relationship] -> [ProcDescription] -> [(Table, [Column], [Text])] -> (Text, Text, Integer, Text) -> Maybe Text -> [PrimaryKey] -> Swagger
-postgrestSpec rels pds ti (s, h, p, b) sd pks = (mempty :: Swagger)
+postgrestSpec :: [Relationship] -> [ProcDescription] -> [(Table, [Column], [Text])] -> (Text, Text, Integer, Text) -> Maybe Text -> Swagger
+postgrestSpec rels pds ti (s, h, p, b) sd = (mempty :: Swagger)
   & basePath ?~ T.unpack b
   & schemes ?~ [s']
   & info .~ ((mempty :: Info)
@@ -334,7 +332,7 @@ postgrestSpec rels pds ti (s, h, p, b) sd pks = (mempty :: Swagger)
     & description ?~ "PostgREST Documentation"
     & url .~ URL ("https://postgrest.org/en/" <> docsVersion <> "/api.html"))
   & host .~ h'
-  & definitions .~ fromList (makeTableDef rels pks <$> ti)
+  & definitions .~ fromList (makeTableDef rels <$> ti)
   & parameters .~ fromList (makeParamDefs ti)
   & paths .~ makePathItems pds ti
   & produces .~ makeMimeList [CTApplicationJSON, CTSingularJSON, CTTextCSV]
@@ -385,5 +383,5 @@ openApiTableInfo :: DbStructure -> Table -> (Table, [Column], [Text])
 openApiTableInfo dbStructure table =
   ( table
   , tableCols dbStructure (tableSchema table) (tableName table)
-  , tablePKCols dbStructure (tableSchema table) (tableName table)
+  , tablePKCols table
   )

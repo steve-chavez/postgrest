@@ -63,8 +63,7 @@ import PostgREST.Config                  (AppConfig (..),
 import PostgREST.Config.PgVersion        (PgVersion (..))
 import PostgREST.ContentType             (ContentType (..))
 import PostgREST.DbStructure             (DbStructure (..),
-                                          findIfView, findTable,
-                                          tablePKCols)
+                                          findIfView, findTable)
 import PostgREST.DbStructure.Identifiers (FieldName,
                                           QualifiedIdentifier (..),
                                           Schema)
@@ -314,7 +313,7 @@ handleCreate :: QualifiedIdentifier -> RequestContext -> DbHandler Wai.Response
 handleCreate identifier@QualifiedIdentifier{..} context@RequestContext{..} = do
   let
     ApiRequest{..} = ctxApiRequest
-    pkCols = tablePKCols ctxDbStructure qiSchema qiName
+    pkCols = maybe mempty tablePKCols $ findTable qiSchema qiName $ dbTables ctxDbStructure
 
   WriteQueryResult{..} <- writeQuery MutationCreate identifier True pkCols context
 
@@ -434,7 +433,7 @@ handleInfo identifier RequestContext{..} =
           ++ ["DELETE" | tableDeletable table]
       )
     hasPK =
-      not $ null $ tablePKCols ctxDbStructure (qiSchema identifier) (qiName identifier)
+      not $ null $ maybe mempty tablePKCols $ findTable (qiSchema identifier) (qiName identifier) (dbTables ctxDbStructure)
 
 handleInvoke :: InvokeMethod -> ProcDescription -> RequestContext -> DbHandler Wai.Response
 handleInvoke invMethod proc context@RequestContext{..} = do
@@ -538,7 +537,7 @@ writeQuery mutation identifier@QualifiedIdentifier{..} isInsert pkCols context@R
   mutateReq <-
     liftEither $
       ReqBuilder.mutateRequest mutation qiSchema qiName ctxApiRequest
-        (tablePKCols ctxDbStructure qiSchema qiName)
+        (maybe mempty tablePKCols $ findTable qiSchema qiName $ dbTables ctxDbStructure)
         readReq
 
   (_, queryTotal, fields, body, gucHeaders, gucStatus) <-

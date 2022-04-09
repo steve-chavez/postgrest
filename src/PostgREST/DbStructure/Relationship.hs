@@ -3,7 +3,6 @@
 
 module PostgREST.DbStructure.Relationship
   ( Cardinality(..)
-  , PrimaryKey(..)
   , Relationship(..)
   , Junction(..)
   , isSelfReference
@@ -54,9 +53,3 @@ data Junction = Junction
 
 isSelfReference :: Relationship -> Bool
 isSelfReference r = relTable r == relForeignTable r
-
-data PrimaryKey = PrimaryKey
-  { pkTable :: Table
-  , pkName  :: Text
-  }
-  deriving (Generic, JSON.ToJSON)

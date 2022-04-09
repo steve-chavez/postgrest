@@ -26,6 +26,7 @@ data Table = Table
   , tableInsertable  :: Bool
   , tableUpdatable   :: Bool
   , tableDeletable   :: Bool
+  , tablePKCols      :: [FieldName]
   }
   deriving (Show, Ord, Generic, JSON.ToJSON)
 
@@ -49,9 +50,3 @@ data Column = Column
 
 instance Eq Column where
   Column{colTable=t1,colName=n1} == Column{colTable=t2,colName=n2} = t1 == t2 && n1 == n2
-
-data PrimaryKey = PrimaryKey
-  { pkTable :: Table
-  , pkName  :: Text
-  }
-  deriving (Generic, JSON.ToJSON)

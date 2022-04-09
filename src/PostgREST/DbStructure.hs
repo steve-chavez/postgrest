@@ -27,7 +27,6 @@ module PostgREST.DbStructure
   , findTable
   , schemaDescription
   , tableCols
-  , tablePKCols
   ) where
 
 import qualified Data.Aeson          as JSON
@@ -55,7 +54,6 @@ import PostgREST.DbStructure.Proc         (PgType (..),
                                            ProcsMap, RetType (..))
 import PostgREST.DbStructure.Relationship (Cardinality (..),
                                            Junction (..),
-                                           PrimaryKey (..),
                                            Relationship (..))
 import PostgREST.DbStructure.Table        (Column (..), Table (..))
 
@@ -67,7 +65,6 @@ data DbStructure = DbStructure
   { dbTables        :: [Table]
   , dbColumns       :: [Column]
   , dbRelationships :: [Relationship]
-  , dbPrimaryKeys   :: [PrimaryKey]
   , dbProcs         :: ProcsMap
   }
   deriving (Generic, JSON.ToJSON)
@@ -75,10 +72,6 @@ data DbStructure = DbStructure
 -- TODO Table could hold references to all its Columns
 tableCols :: DbStructure -> Schema -> TableName -> [Column]
 tableCols dbs tSchema tName = filter (\Column{colTable=Table{tableSchema=s, tableName=t}} -> s==tSchema && t==tName) $ dbColumns dbs
-
--- TODO Table could hold references to all its PrimaryKeys
-tablePKCols :: DbStructure -> Schema -> TableName -> [Text]
-tablePKCols dbs tSchema tName = pkName <$> filter (\pk -> tSchema == (tableSchema . pkTable) pk && tName == (tableName . pkTable) pk) (dbPrimaryKeys dbs)
 
 findTable :: Schema -> TableName -> [Table] -> Maybe Table
 findTable tSchema tName = find (\tbl -> tableSchema tbl == tSchema && tableName tbl == tName)
@@ -98,20 +91,19 @@ queryDbStructure schemas extraSearchPath prepared = do
   SQL.sql "set local schema ''" -- This voids the search path. The following queries need this for getting the fully qualified name(schema.name) of every db object
   pgVer   <- SQL.statement mempty pgVersionStatement
   tabs    <- SQL.statement mempty $ allTables pgVer prepared
+  tabsPKs <- SQL.statement mempty $ allPrimaryKeys tabs prepared
   cols    <- SQL.statement schemas $ allColumns tabs prepared
   srcCols <- SQL.statement (schemas, extraSearchPath) $ pfkSourceColumns cols prepared
   m2oRels <- SQL.statement mempty $ allM2ORels tabs cols prepared
-  keys    <- SQL.statement mempty $ allPrimaryKeys tabs prepared
   procs   <- SQL.statement schemas $ allProcs pgVer prepared
 
-  let rels = addO2MRels . addM2MRels $ addViewM2ORels srcCols m2oRels
-      keys' = addViewPrimaryKeys srcCols keys
+  let rels     = addO2MRels . addM2MRels $ addViewM2ORels srcCols m2oRels
+      --keys'    = addViewPrimaryKeys srcCols keys
 
   return $ removeInternal schemas $ DbStructure {
-      dbTables = tabs
+      dbTables = tabsPKs
     , dbColumns = cols
     , dbRelationships = rels
-    , dbPrimaryKeys = keys'
     , dbProcs = procs
     }
 
@@ -124,7 +116,6 @@ removeInternal schemas dbStruct =
     , dbRelationships = filter (\x -> tableSchema (relTable x) `elem` schemas &&
                                       tableSchema (relForeignTable x) `elem` schemas &&
                                       not (hasInternalJunction x)) $ dbRelationships dbStruct
-    , dbPrimaryKeys   = filter (\x -> tableSchema (pkTable x) `elem` schemas) $ dbPrimaryKeys dbStruct
     , dbProcs         = dbProcs dbStruct -- procs are only obtained from the exposed schemas, no need to filter them.
     }
   where
@@ -143,6 +134,7 @@ decodeTables =
                  <*> column HD.bool
                  <*> column HD.bool
                  <*> column HD.bool
+                 <*> pure mempty -- no PKs at this stage
 
 decodeColumns :: [Table] -> HD.Result [Column]
 decodeColumns tables =
@@ -173,11 +165,15 @@ decodeRels tables cols =
     <*> column HD.text
     <*> arrayColumn HD.text
 
-decodePks :: [Table] -> HD.Result [PrimaryKey]
+decodePks :: [Table] -> HD.Result [Table]
 decodePks tables =
   mapMaybe (pkFromRow tables) <$> HD.rowList pkRow
  where
-  pkRow = (,,) <$> column HD.text <*> column HD.text <*> column HD.text
+  pkRow = (,,) <$> column HD.text <*> column HD.text <*> arrayColumn HD.text
+
+pkFromRow :: [Table] -> (Schema, Text, [Text]) -> Maybe Table
+pkFromRow tabs (s, t, n) = (\tbl -> tbl{tablePKCols=n}) <$> table
+  where table = find (\tbl -> tableSchema tbl == s && tableName tbl == t) tabs
 
 decodeSourceColumns :: [Column] -> HD.Result [SourceColumn]
 decodeSourceColumns cols =
@@ -463,11 +459,11 @@ addM2MRels rels = rels ++ [ Relationship t c ft fc (M2M $ Junction jt1 cons1 jc1
                           , jt1 == jt2
                           , cons1 /= cons2]
 
-addViewPrimaryKeys :: [SourceColumn] -> [PrimaryKey] -> [PrimaryKey]
-addViewPrimaryKeys srcCols = concatMap (\pk ->
-  let viewPks = (\(_, viewCol) -> PrimaryKey{pkTable=colTable viewCol, pkName=colName viewCol}) <$>
-                filter (\(col, _) -> colTable col == pkTable pk && colName col == pkName pk) srcCols in
-  pk : viewPks)
+--addViewPrimaryKeys :: [SourceColumn] -> [PrimaryKey] -> [PrimaryKey]
+--addViewPrimaryKeys srcCols = concatMap (\pk ->
+  --let viewPks = (\(_, viewCol) -> PrimaryKey{pkTable=colTable viewCol, pkName=colName viewCol}) <$>
+                --filter (\(col, _) -> colTable col == pkTable pk && colName col == pkName pk) srcCols in
+  --pk : viewPks)
 
 allTables :: PgVersion -> Bool -> SQL.Statement () [Table]
 allTables pgVer =
@@ -686,7 +682,7 @@ relFromRow allTabs allCols (rs, rt, cn, rcs, frs, frt, frcs) =
     cols  = mapM (findCol rs rt) rcs
     colsF = mapM (findCol frs frt) frcs
 
-allPrimaryKeys :: [Table] -> Bool -> SQL.Statement () [PrimaryKey]
+allPrimaryKeys :: [Table] -> Bool -> SQL.Statement () [Table]
 allPrimaryKeys tabs =
   SQL.Statement sql HE.noParams (decodePks tabs)
  where
@@ -753,18 +749,16 @@ allPrimaryKeys tabs =
     SELECT
         kc.table_schema,
         kc.table_name,
-        kc.column_name
-    FROM
-        tc, kc
+        array_agg(kc.column_name ORDER BY kc.column_name)
+    FROM tc
+    JOIN kc ON
+      kc.table_name = tc.table_name AND
+      kc.table_schema = tc.table_schema AND
+      kc.constraint_name = tc.constraint_name
     WHERE
-        kc.table_name = tc.table_name AND
-        kc.table_schema = tc.table_schema AND
-        kc.constraint_name = tc.constraint_name AND
-        kc.table_schema NOT IN ('pg_catalog', 'information_schema') |]
-
-pkFromRow :: [Table] -> (Schema, Text, Text) -> Maybe PrimaryKey
-pkFromRow tabs (s, t, n) = PrimaryKey <$> table <*> pure n
-  where table = find (\tbl -> tableSchema tbl == s && tableName tbl == t) tabs
+      kc.table_schema NOT IN ('pg_catalog', 'information_schema')
+    GROUP BY
+      kc.table_schema, kc.table_name |]
 
 -- returns all the primary and foreign key columns which are referenced in views
 pfkSourceColumns :: [Column] -> Bool -> SQL.Statement ([Schema], [Schema]) [SourceColumn]
