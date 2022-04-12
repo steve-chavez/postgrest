@@ -79,8 +79,8 @@ findTable tSchema tName = find (\tbl -> tableSchema tbl == tSchema && tableName 
 findIfView :: QualifiedIdentifier -> [Table] -> Bool
 findIfView identifier tbls = maybe False tableIsView (findTable (qiSchema identifier) (qiName identifier) tbls)
 
--- | The source table column a view column refers to
-type SourceColumn = (Column, ViewColumn)
+data ViewKeyDependency = ViewKeyDependency Schema TableName Text KeyDep [(Column, ViewColumn)]
+data KeyDep = PKDep | FKDep | FKDepRef
 type ViewColumn = Column
 
 -- | A SQL query that can be executed independently
@@ -93,15 +93,18 @@ queryDbStructure schemas extraSearchPath prepared = do
   tabs    <- SQL.statement mempty $ allTables pgVer prepared
   tabsPKs <- SQL.statement mempty $ allPrimaryKeys tabs prepared
   cols    <- SQL.statement schemas $ allColumns tabs prepared
-  srcCols <- SQL.statement (schemas, extraSearchPath) $ pfkSourceColumns cols prepared
+  keyDeps <- SQL.statement (schemas, extraSearchPath) $ viewsKeyDependencies cols prepared
   m2oRels <- SQL.statement mempty $ allM2ORels tabs cols prepared
   procs   <- SQL.statement schemas $ allProcs pgVer prepared
 
-  let rels     = addO2MRels . addM2MRels $ addViewM2ORels srcCols m2oRels
-      --keys'    = addViewPrimaryKeys srcCols keys
+  --let rels     = addO2MRels . addM2MRels $ addViewM2ORels keyDeps m2oRels
+      ----keys'    = addViewPrimaryKeys keyDeps keys
+      --
+  let rels         = addO2MRels $ addM2MRels m2oRels
+      tabsViewsPks = addViewPrimaryKeys tabsPKs keyDeps
 
   return $ removeInternal schemas $ DbStructure {
-      dbTables = tabsPKs
+      dbTables = tabsViewsPks
     , dbColumns = cols
     , dbRelationships = rels
     , dbProcs = procs
@@ -175,20 +178,31 @@ pkFromRow :: [Table] -> (Schema, Text, [Text]) -> Maybe Table
 pkFromRow tabs (s, t, n) = (\tbl -> tbl{tablePKCols=n}) <$> table
   where table = find (\tbl -> tableSchema tbl == s && tableName tbl == t) tabs
 
-decodeSourceColumns :: [Column] -> HD.Result [SourceColumn]
-decodeSourceColumns cols =
-  mapMaybe (sourceColumnFromRow cols) <$> HD.rowList srcColRow
+decodeViewKeyDeps :: [Column] -> HD.Result [ViewKeyDependency]
+decodeViewKeyDeps cols =
+  map (viewKeyDepFromRow cols) <$> HD.rowList row
  where
-  srcColRow = (,,,,,)
+  row = (,,,,,,)
     <$> column HD.text <*> column HD.text
     <*> column HD.text <*> column HD.text
     <*> column HD.text <*> column HD.text
+    <*> compositeArrayColumn
+        ((,)
+        <$> compositeField HD.text
+        <*> compositeField HD.text)
 
-sourceColumnFromRow :: [Column] -> (Text,Text,Text,Text,Text,Text) -> Maybe SourceColumn
-sourceColumnFromRow allCols (s1,t1,c1,s2,t2,c2) = (,) <$> col1 <*> col2
+viewKeyDepFromRow :: [Column] -> (Text,Text,Text,Text,Text,Text,[(Text, Text)]) -> ViewKeyDependency
+viewKeyDepFromRow allCols (s1,t1,s2,v2,cons,consType,sCols) = ViewKeyDependency s2 v2 cons keyDep finalCols
   where
-    col1 = findCol s1 t1 c1
-    col2 = findCol s2 t2 c2
+    keyDep | consType == "p" = PKDep
+           | consType == "f" = FKDep
+           | otherwise       = FKDepRef -- f_ref, we build this type in the query
+    finalCols = catMaybes $ (\(c1, c2) ->
+      let
+        col1 = findCol s1 t1 c1
+        col2 = findCol s2 v2 c2
+      in
+      (,) <$> col1 <*> col2) <$> sCols
     findCol s t c = find (\col -> (tableSchema . colTable) col == s && (tableName . colTable) col == t && colName col == c) allCols
 
 decodeProcs :: HD.Result ProcsMap
@@ -409,44 +423,44 @@ When having t1_view.c1 and a t2_view.c2 source columns, we need to add a View-Vi
 
 The logic for composite pks is similar just need to make sure all the Relationship columns have source columns.
 -}
-addViewM2ORels :: [SourceColumn] -> [Relationship] -> [Relationship]
-addViewM2ORels allSrcCols = concatMap (\rel@Relationship{..} -> rel :
-  let
-    srcColsGroupedByView :: [Column] -> [[SourceColumn]]
-    srcColsGroupedByView relCols = L.groupBy (\(_, viewCol1) (_, viewCol2) -> colTable viewCol1 == colTable viewCol2) $
-                   filter (\(c, _) -> c `elem` relCols) allSrcCols
-    relSrcCols = srcColsGroupedByView relColumns
-    relFSrcCols = srcColsGroupedByView relForeignColumns
-    getView :: [SourceColumn] -> Table
-    getView = colTable . snd . unsafeHead
-    srcCols `allSrcColsOf` cols = S.fromList (fst <$> srcCols) == S.fromList cols
-    -- Relationship is dependent on the order of relColumns and relFColumns to get the join conditions right in the generated query.
-    -- So we need to change the order of the SourceColumns to match the relColumns
-    -- TODO: This could be avoided if the Relationship type is improved with a structure that maintains the association of relColumns and relFColumns
-    srcCols `sortAccordingTo` cols = sortOn (\(k, _) -> L.lookup k $ zip cols [0::Int ..]) srcCols
+--addViewM2ORels :: [ViewKeyDependency] -> [Relationship] -> [Relationship]
+--addViewM2ORels keyDeps = concatMap (\rel@Relationship{..} -> rel :
+  --let
+    --srcColsGroupedByView :: [Column] -> [[ViewKeyDependency]]
+    --srcColsGroupedByView relCols = L.groupBy (\(_, viewCol1) (_, viewCol2) -> colTable viewCol1 == colTable viewCol2) $
+                   --filter (\ViewKeyDependency _ depType c _) -> depType `elem` [FKDep, FKDepRef] && c `elem` relCols) keyDeps
+    --relSrcCols = srcColsGroupedByView relColumns
+    --relFSrcCols = srcColsGroupedByView relForeignColumns
+    --getView :: [SourceColumn] -> Table
+    --getView = colTable . snd . unsafeHead
+    --srcCols `allSrcColsOf` cols = S.fromList (fst <$> srcCols) == S.fromList cols
+    ---- Relationship is dependent on the order of relColumns and relFColumns to get the join conditions right in the generated query.
+    ---- So we need to change the order of the SourceColumns to match the relColumns
+    ---- TODO: This could be avoided if the Relationship type is improved with a structure that maintains the association of relColumns and relFColumns
+    --srcCols `sortAccordingTo` cols = sortOn (\(k, _) -> L.lookup k $ zip cols [0::Int ..]) srcCols
 
-    viewTableM2O =
-      [ Relationship
-          (getView srcCols) (snd <$> srcCols `sortAccordingTo` relColumns)
-          relForeignTable relForeignColumns relCardinality
-      | srcCols <- relSrcCols, srcCols `allSrcColsOf` relColumns ]
+    --viewTableM2O =
+      --[ Relationship
+          --(getView srcCols) (snd <$> srcCols `sortAccordingTo` relColumns)
+          --relForeignTable relForeignColumns relCardinality
+       -- | srcCols <- relSrcCols, srcCols `allSrcColsOf` relColumns ]
 
-    tableViewM2O =
-      [ Relationship
-          relTable relColumns
-          (getView fSrcCols) (snd <$> fSrcCols `sortAccordingTo` relForeignColumns)
-          relCardinality
-      | fSrcCols <- relFSrcCols, fSrcCols `allSrcColsOf` relForeignColumns ]
+    --tableViewM2O =
+      --[ Relationship
+          --relTable relColumns
+          --(getView fSrcCols) (snd <$> fSrcCols `sortAccordingTo` relForeignColumns)
+          --relCardinality
+       -- | fSrcCols <- relFSrcCols, fSrcCols `allSrcColsOf` relForeignColumns ]
 
-    viewViewM2O =
-      [ Relationship
-          (getView srcCols) (snd <$> srcCols `sortAccordingTo` relColumns)
-          (getView fSrcCols) (snd <$> fSrcCols `sortAccordingTo` relForeignColumns)
-          relCardinality
-      | srcCols  <- relSrcCols, srcCols `allSrcColsOf` relColumns
-      , fSrcCols <- relFSrcCols, fSrcCols `allSrcColsOf` relForeignColumns ]
+    --viewViewM2O =
+      --[ Relationship
+          --(getView srcCols) (snd <$> srcCols `sortAccordingTo` relColumns)
+          --(getView fSrcCols) (snd <$> fSrcCols `sortAccordingTo` relForeignColumns)
+          --relCardinality
+       -- | srcCols  <- relSrcCols, srcCols `allSrcColsOf` relColumns
+      --, fSrcCols <- relFSrcCols, fSrcCols `allSrcColsOf` relForeignColumns ]
 
-  in viewTableM2O ++ tableViewM2O ++ viewViewM2O)
+  --in viewTableM2O ++ tableViewM2O ++ viewViewM2O)
 
 addO2MRels :: [Relationship] -> [Relationship]
 addO2MRels rels = rels ++ [ Relationship ft fc t c (O2M cons)
@@ -459,11 +473,14 @@ addM2MRels rels = rels ++ [ Relationship t c ft fc (M2M $ Junction jt1 cons1 jc1
                           , jt1 == jt2
                           , cons1 /= cons2]
 
---addViewPrimaryKeys :: [SourceColumn] -> [PrimaryKey] -> [PrimaryKey]
---addViewPrimaryKeys srcCols = concatMap (\pk ->
-  --let viewPks = (\(_, viewCol) -> PrimaryKey{pkTable=colTable viewCol, pkName=colName viewCol}) <$>
-                --filter (\(col, _) -> colTable col == pkTable pk && colName col == pkName pk) srcCols in
-  --pk : viewPks)
+addViewPrimaryKeys :: [Table] -> [ViewKeyDependency] -> [Table]
+addViewPrimaryKeys tabs keyDeps =
+  (\tbl@Table{tableSchema, tableName}-> tbl{tablePKCols=findViewPKCols tableSchema tableName}) <$>
+  filter tableIsView tabs
+  where
+    findViewPKCols sch vw =
+      maybe [] (\(ViewKeyDependency _ _ _ _ pkCols) -> colName . snd <$> pkCols) $
+      find (\(ViewKeyDependency s v _ PKDep _) -> sch == s && vw == v) keyDeps
 
 allTables :: PgVersion -> Bool -> SQL.Statement () [Table]
 allTables pgVer =
@@ -760,10 +777,10 @@ allPrimaryKeys tabs =
     GROUP BY
       kc.table_schema, kc.table_name |]
 
--- returns all the primary and foreign key columns which are referenced in views
-pfkSourceColumns :: [Column] -> Bool -> SQL.Statement ([Schema], [Schema]) [SourceColumn]
-pfkSourceColumns cols =
-  SQL.Statement sql (contrazip2 (arrayParam HE.text) (arrayParam HE.text)) (decodeSourceColumns cols)
+-- Returns all the primary and foreign key view dependencies
+viewsKeyDependencies :: [Column] -> Bool -> SQL.Statement ([Schema], [Schema]) [ViewKeyDependency]
+viewsKeyDependencies cols =
+  SQL.Statement sql (contrazip2 (arrayParam HE.text) (arrayParam HE.text)) (decodeViewKeyDeps cols)
   -- query explanation at:
   --  * rationale: https://gist.github.com/wolfgangwalther/5425d64e7b0d20aad71f6f68474d9f19
   --  * json transformation: https://gist.github.com/wolfgangwalther/3a8939da680c24ad767e93ad2c183089
@@ -773,6 +790,8 @@ pfkSourceColumns cols =
       pks_fks as (
         -- pk + fk referencing col
         select
+          contype,
+          conname,
           conrelid as resorigtbl,
           unnest(conkey) as resorigcol
         from pg_constraint
@@ -780,6 +799,8 @@ pfkSourceColumns cols =
         union
         -- fk referenced col
         select
+          concat(contype, '_ref') as contype,
+          conname,
           confrelid,
           unnest(confkey)
         from pg_constraint
@@ -908,17 +929,19 @@ pfkSourceColumns cols =
       select
         sch.nspname as table_schema,
         tbl.relname as table_name,
-        col.attname as table_column_name,
         rec.view_schema,
         rec.view_name,
-        vcol.attname as view_column_name
+        pks_fks.conname as constraint_name,
+        pks_fks.contype as constraint_type,
+        array_agg(row(col.attname, vcol.attname)) as column_dependencies
       from recursion rec
       join pg_class tbl on tbl.oid = rec.resorigtbl
       join pg_attribute col on col.attrelid = tbl.oid and col.attnum = rec.resorigcol
       join pg_attribute vcol on vcol.attrelid = rec.view_id and vcol.attnum = rec.view_column
       join pg_namespace sch on sch.oid = tbl.relnamespace
       join pks_fks using (resorigtbl, resorigcol)
-      order by view_schema, view_name, view_column_name; |]
+      group by sch.nspname, tbl.relname,  rec.view_schema, rec.view_name, pks_fks.conname, pks_fks.contype
+      |]
 
 param :: HE.Value a -> HE.Params a
 param = HE.param . HE.nonNullable
