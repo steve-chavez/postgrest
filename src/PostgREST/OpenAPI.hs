@@ -31,8 +31,9 @@ import PostgREST.DbStructure              (DbStructure (..),
                                            tableCols)
 import PostgREST.DbStructure.Proc         (ProcDescription (..),
                                            ProcParam (..))
-import PostgREST.DbStructure.Relationship (Cardinality (..),
-                                           Relationship (..))
+--import PostgREST.DbStructure.Relationship (Cardinality (..),
+                                           --Relationship (..))
+import PostgREST.DbStructure.Relationship (Relationship (..))
 import PostgREST.DbStructure.Table        (Column (..), Table (..))
 import PostgREST.Version                  (docsVersion, prettyVersion)
 
@@ -89,28 +90,28 @@ makeTableDef rels (t, cs, _) =
         & required .~ fmap colName (filter (not . colNullable) cs))
 
 makeProperty :: [Relationship] -> Column -> (Text, Referenced Schema)
-makeProperty rels col = (colName col, Inline s)
+makeProperty _ col = (colName col, Inline s)
   where
     e = if null $ colEnum col then Nothing else JSON.decode $ JSON.encode $ colEnum col
-    fk :: Maybe Text
-    fk =
-      let
-        -- Finds the relationship that has a single column foreign key
-        rel = find (\case
-          Relationship{relColumns, relCardinality=M2O _} -> [colName col] == relColumns
-          _                                                 -> False
-          ) rels
-        fCol = (headMay . relForeignColumns =<< rel)
-        fTbl = tableName . relForeignTable <$> rel
-        fTblCol = (,) <$> fTbl <*> fCol
-      in
-        (\(a, b) -> T.intercalate "" ["This is a Foreign Key to `", a, ".", b, "`.<fk table='", a, "' column='", b, "'/>"]) <$> fTblCol
+    --fk :: Maybe Text
+    --fk =
+      --let
+        ---- Finds the relationship that has a single column foreign key
+        --rel = find (\case
+          --Relationship{relColumns, relCardinality=M2O _} -> [colName col] == (fst <$> relColumns)
+          --_                                                 -> False
+          --) rels
+        --fCol = (headMay . relColumns =<< rel)
+        --fTbl = tableName . relForeignTable <$> rel
+        --fTblCol = (,) <$> fTbl <*> fCol
+      --in
+        --(\(a, b) -> T.intercalate "" ["This is a Foreign Key to `", a, ".", b, "`.<fk table='", a, "' column='", b, "'/>"]) <$> fTblCol
     pk :: Bool
     pk = any (\pkcol ->  pkcol == colName col) $ tablePKCols (colTable col)
     n = catMaybes
       [ Just "Note:"
       , if pk then Just "This is a Primary Key.<pk/>" else Nothing
-      , fk
+      , Nothing
       ]
     d =
       if length n > 1 then

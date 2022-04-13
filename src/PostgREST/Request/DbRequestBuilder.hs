@@ -193,8 +193,8 @@ findRel schema allRels origin target hint =
           ) ||
           -- /projects?select=client_id(*)
           (
-            origin == tableName relTable &&           -- projects
-            matchFKSingleCol (Just target) relColumns -- client_id
+            origin == tableName relTable &&                     -- projects
+            matchFKSingleCol (Just target) (fst <$> relColumns) -- client_id
           )
         ) && (
           isNothing hint || -- hint is optional
@@ -203,8 +203,8 @@ findRel schema allRels origin target hint =
           matchConstraint hint relCardinality || -- projects_client_id_fkey
 
           -- /projects?select=clients!client_id(*) or /projects?select=clients!id(*)
-          matchFKSingleCol hint relColumns  || -- client_id
-          matchFKSingleCol hint relForeignColumns || -- id
+          matchFKSingleCol hint (fst <$> relColumns)  || -- client_id
+          matchFKSingleCol hint (snd <$> relColumns)  || -- id
 
           -- /users?select=tasks!users_tasks(*) many-to-many between users and tasks
           matchJunction hint relCardinality -- users_tasks
@@ -235,15 +235,15 @@ addJoinConditions previousAlias (Node node@(query@Select{from=tbl}, nodeProps@(_
 
 -- previousAlias and newAlias are used in the case of self joins
 getJoinConditions :: Maybe Alias -> Maybe Alias -> Relationship -> [JoinCondition]
-getJoinConditions previousAlias newAlias (Relationship Table{tableSchema=tSchema, tableName=tN} cols Table{tableName=ftN} fCols card) =
+getJoinConditions previousAlias newAlias (Relationship Table{tableSchema=tSchema, tableName=tN} Table{tableName=ftN} card cols) =
   case card of
-    M2M (Junction Table{tableName=jtn} _ jc1 _ jc2) ->
-      zipWith (toJoinCondition tN jtn) cols jc1 ++ zipWith (toJoinCondition ftN jtn) fCols jc2
+    M2M (Junction Table{tableName=jtn} _ _ jcols1 jcols2) ->
+      (toJoinCondition tN jtn <$> jcols1) ++ (toJoinCondition ftN jtn <$> jcols2)
     _ ->
-      zipWith (toJoinCondition tN ftN) cols fCols
+      toJoinCondition tN ftN <$> cols
   where
-    toJoinCondition :: Text -> Text -> FieldName -> FieldName -> JoinCondition
-    toJoinCondition tb ftb c fc =
+    toJoinCondition :: Text -> Text -> (FieldName, FieldName) -> JoinCondition
+    toJoinCondition tb ftb (c, fc) =
       let qi1 = removeSourceCTESchema tSchema tb
           qi2 = removeSourceCTESchema tSchema ftb in
         JoinCondition (maybe qi1 (QualifiedIdentifier mempty) previousAlias, c)
@@ -381,7 +381,7 @@ returningCols rr@(Node _ forest) pkCols
     -- projects.  So this adds the foreign key columns to ensure the embedding
     -- succeeds, result would be `RETURNING name, client_id`.
     fkCols = concat $ mapMaybe (\case
-        Node (_, (_, Just Relationship{relColumns=cols}, _, _, _, _)) _ -> Just cols
+        Node (_, (_, Just Relationship{relColumns=cols}, _, _, _, _)) _ -> Just $ snd <$> cols
         _                                                        -> Nothing
       ) forest
     -- However if the "client_id" is present, e.g. mutateRequest to

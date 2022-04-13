@@ -159,14 +159,21 @@ decodeRels :: [Table] -> HD.Result [Relationship]
 decodeRels tables =
   mapMaybe (relFromRow tables) <$> HD.rowList relRow
  where
-  relRow = (,,,,,,)
-    <$> column HD.text
+  relRow = (,,,,,)
+    <$> column HD.text <*> column HD.text
+    <*> column HD.text <*> column HD.text
     <*> column HD.text
-    <*> column HD.text
-    <*> arrayColumn HD.text
-    <*> column HD.text
-    <*> column HD.text
-    <*> arrayColumn HD.text
+    <*> compositeArrayColumn
+        ((,)
+        <$> compositeField HD.text
+        <*> compositeField HD.text)
+
+relFromRow :: [Table] -> (Text, Text, Text, Text, Text, [(Text, Text)]) -> Maybe Relationship
+relFromRow allTabs (rs, rt, cn, frs, frt, cs) =
+  Relationship <$> table <*> tableF <*> pure (M2O cn) <*> pure cs
+  where
+    table  = findTable rs rt allTabs
+    tableF = findTable frs frt allTabs
 
 decodePks :: [Table] -> HD.Result [Table]
 decodePks tables =
@@ -426,13 +433,14 @@ The logic for composite pks is similar just need to make sure all the Relationsh
 --addViewM2ORels :: [ViewKeyDependency] -> [Relationship] -> [Relationship]
 
 addO2MRels :: [Relationship] -> [Relationship]
-addO2MRels rels = rels ++ [ Relationship ft fc t c (O2M cons)
-                          | Relationship t c ft fc (M2O cons) <- rels ]
+addO2MRels rels = rels ++ [ Relationship ft t (O2M cons) (swap <$> cols)
+                          | Relationship t ft (M2O cons) cols <- rels ]
 
 addM2MRels :: [Relationship] -> [Relationship]
-addM2MRels rels = rels ++ [ Relationship t c ft fc (M2M $ Junction jt1 cons1 jc1 cons2 jc2)
-                          | Relationship jt1 jc1 t c (M2O cons1) <- rels
-                          , Relationship jt2 jc2 ft fc (M2O cons2) <- rels
+addM2MRels rels = rels ++ [ Relationship t ft
+                              (M2M $ Junction jt1 cons1 cons2 (swap <$> cols) (swap <$> fcols)) []
+                          | Relationship jt1 t  (M2O cons1) cols  <- rels
+                          , Relationship jt2 ft (M2O cons2) fcols <- rels
                           , jt1 == jt2
                           , cons1 /= cons2]
 
@@ -632,16 +640,14 @@ allM2ORels tabs =
   sql = [q|
     SELECT ns1.nspname AS table_schema,
            tab.relname AS table_name,
-           conname     AS constraint_name,
-           column_info.cols AS columns,
            ns2.nspname AS foreign_table_schema,
            other.relname AS foreign_table_name,
-           column_info.refs AS foreign_columns
+           conname     AS constraint_name,
+           column_info.cols AS columns
     FROM pg_constraint,
     LATERAL (
-      SELECT array_agg(cols.attname) AS cols,
-                    array_agg(cols.attnum)  AS nums,
-                    array_agg(refs.attname) AS refs
+      SELECT array_agg(row(cols.attname, refs.attname)) AS cols,
+                    array_agg(cols.attnum)  AS nums
       FROM ( SELECT unnest(conkey) AS col, unnest(confkey) AS ref) k,
       LATERAL (SELECT * FROM pg_attribute WHERE attrelid = conrelid AND attnum = col) AS cols,
       LATERAL (SELECT * FROM pg_attribute WHERE attrelid = confrelid AND attnum = ref) AS refs) AS column_info,
@@ -650,14 +656,7 @@ allM2ORels tabs =
     LATERAL (SELECT * FROM pg_class WHERE pg_class.oid = confrelid) AS other,
     LATERAL (SELECT * FROM pg_namespace WHERE pg_namespace.oid = other.relnamespace) AS ns2
     WHERE confrelid != 0
-    ORDER BY (conrelid, column_info.nums) |]
-
-relFromRow :: [Table] -> (Text, Text, Text, [Text], Text, Text, [Text]) -> Maybe Relationship
-relFromRow allTabs (rs, rt, cn, rcs, frs, frt, frcs) =
-  Relationship <$> table <*> pure rcs <*> tableF <*> pure frcs <*> pure (M2O cn)
-  where
-    table  = findTable rs rt allTabs
-    tableF = findTable frs frt allTabs
+    ORDER BY (conrelid, column_info.nums)|]
 
 allPrimaryKeys :: [Table] -> Bool -> SQL.Statement () [Table]
 allPrimaryKeys tabs =

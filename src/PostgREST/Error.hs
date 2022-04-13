@@ -162,11 +162,11 @@ compressedRel Relationship{..} =
           ]
         M2O cons -> [
             "cardinality" .= ("many-to-one" :: Text)
-          , "relationship" .= (cons <> fmtEls relColumns <> fmtEls relForeignColumns)
+          , "relationship" .= (cons <> fmtEls (fst <$> relColumns) <> fmtEls (snd <$> relColumns))
           ]
         O2M cons -> [
             "cardinality" .= ("one-to-many" :: Text)
-          , "relationship" .= (cons <> fmtEls relColumns <> fmtEls relForeignColumns)
+          , "relationship" .= (cons <> fmtEls (fst <$> relColumns) <> fmtEls (snd <$> relColumns))
           ]
 
 relHint :: [Relationship] -> Text

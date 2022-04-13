@@ -17,17 +17,11 @@ import Protolude
 
 
 -- | Relationship between two tables.
---
--- The order of the relColumns and relForeignColumns should be maintained to get the
--- join conditions right.
---
--- TODO merge relColumns and relForeignColumns to a tuple or Data.Bimap
 data Relationship = Relationship
   { relTable          :: Table
-  , relColumns        :: [FieldName]
   , relForeignTable   :: Table
-  , relForeignColumns :: [FieldName]
   , relCardinality    :: Cardinality
+  , relColumns        :: [(FieldName, FieldName)]
   }
   deriving (Eq, Generic, JSON.ToJSON)
 
@@ -46,9 +40,9 @@ type FKConstraint = Text
 data Junction = Junction
   { junTable       :: Table
   , junConstraint1 :: FKConstraint
-  , junColumns1    :: [FieldName]
   , junConstraint2 :: FKConstraint
-  , junColumns2    :: [FieldName]
+  , junColumns1    :: [(FieldName, FieldName)]
+  , junColumns2    :: [(FieldName, FieldName)]
   }
   deriving (Eq, Generic, JSON.ToJSON)
 
