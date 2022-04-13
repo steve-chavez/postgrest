@@ -39,7 +39,7 @@ import PostgREST.DbStructure.Proc         (ProcDescription (..),
 import PostgREST.DbStructure.Relationship (Cardinality (..),
                                            Junction (..),
                                            Relationship (..))
-import PostgREST.DbStructure.Table        (Column (..), Table (..))
+import PostgREST.DbStructure.Table        (Table (..))
 
 import Protolude
 
@@ -162,11 +162,11 @@ compressedRel Relationship{..} =
           ]
         M2O cons -> [
             "cardinality" .= ("many-to-one" :: Text)
-          , "relationship" .= (cons <> fmtEls (colName <$> relColumns) <> fmtEls (colName <$> relForeignColumns))
+          , "relationship" .= (cons <> fmtEls relColumns <> fmtEls relForeignColumns)
           ]
         O2M cons -> [
             "cardinality" .= ("one-to-many" :: Text)
-          , "relationship" .= (cons <> fmtEls (colName <$> relColumns) <> fmtEls (colName <$> relForeignColumns))
+          , "relationship" .= (cons <> fmtEls relColumns <> fmtEls relForeignColumns)
           ]
 
 relHint :: [Relationship] -> Text

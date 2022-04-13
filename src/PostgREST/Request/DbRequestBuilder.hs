@@ -37,7 +37,7 @@ import PostgREST.DbStructure.Proc         (ProcDescription (..),
 import PostgREST.DbStructure.Relationship (Cardinality (..),
                                            Junction (..),
                                            Relationship (..))
-import PostgREST.DbStructure.Table        (Column (..), Table (..),
+import PostgREST.DbStructure.Table        (Table (..),
                                            tableQi)
 import PostgREST.Error                    (Error (..))
 import PostgREST.Query.SqlFragment        (sourceCTEName)
@@ -169,7 +169,7 @@ findRel schema allRels origin target hint =
       _                            -> Left $ AmbiguousRelBetween origin target rs
     rs -> Left $ AmbiguousRelBetween origin target rs
   where
-    matchFKSingleCol hint_ cols = length cols == 1 && hint_ == (colName <$> head cols)
+    matchFKSingleCol hint_ cols = length cols == 1 && hint_ == (head cols)
     matchConstraint tar card = case card of
       O2M cons -> tar == Just cons
       M2O cons -> tar == Just cons
@@ -242,12 +242,12 @@ getJoinConditions previousAlias newAlias (Relationship Table{tableSchema=tSchema
     _ ->
       zipWith (toJoinCondition tN ftN) cols fCols
   where
-    toJoinCondition :: Text -> Text -> Column -> Column -> JoinCondition
+    toJoinCondition :: Text -> Text -> FieldName -> FieldName -> JoinCondition
     toJoinCondition tb ftb c fc =
       let qi1 = removeSourceCTESchema tSchema tb
           qi2 = removeSourceCTESchema tSchema ftb in
-        JoinCondition (maybe qi1 (QualifiedIdentifier mempty) previousAlias, colName c)
-                      (maybe qi2 (QualifiedIdentifier mempty) newAlias, colName fc)
+        JoinCondition (maybe qi1 (QualifiedIdentifier mempty) previousAlias, c)
+                      (maybe qi2 (QualifiedIdentifier mempty) newAlias, fc)
 
     -- On mutation and calling proc cases we wrap the target table in a WITH
     -- {sourceCTEName} if this happens remove the schema `FROM
@@ -391,7 +391,7 @@ returningCols rr@(Node _ forest) pkCols
     -- deduplicate with Set: We are adding the primary key columns as well to
     -- make sure, that a proper location header can always be built for
     -- INSERT/POST
-    returnings = S.toList . S.fromList $ fldNames ++ (colName <$> fkCols) ++ pkCols
+    returnings = S.toList . S.fromList $ fldNames ++ fkCols ++ pkCols
 
 -- Traditional filters(e.g. id=eq.1) are added as root nodes of the LogicTree
 -- they are later concatenated with AND in the QueryBuilder

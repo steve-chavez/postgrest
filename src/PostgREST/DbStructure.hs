@@ -31,14 +31,14 @@ module PostgREST.DbStructure
 
 import qualified Data.Aeson          as JSON
 import qualified Data.HashMap.Strict as M
-import qualified Data.List           as L
+--import qualified Data.List           as L
 import qualified Hasql.Decoders      as HD
 import qualified Hasql.Encoders      as HE
 import qualified Hasql.Statement     as SQL
 import qualified Hasql.Transaction   as SQL
 
 import Contravariant.Extras          (contrazip2)
-import Data.Set                      as S (fromList)
+--import Data.Set                      as S (fromList)
 import Data.Text                     (split)
 import Text.InterpolatedString.Perl6 (q)
 
@@ -58,7 +58,7 @@ import PostgREST.DbStructure.Relationship (Cardinality (..),
 import PostgREST.DbStructure.Table        (Column (..), Table (..))
 
 import Protolude
-import Protolude.Unsafe (unsafeHead)
+--import Protolude.Unsafe (unsafeHead)
 
 
 data DbStructure = DbStructure
@@ -94,7 +94,7 @@ queryDbStructure schemas extraSearchPath prepared = do
   tabsPKs <- SQL.statement mempty $ allPrimaryKeys tabs prepared
   cols    <- SQL.statement schemas $ allColumns tabs prepared
   keyDeps <- SQL.statement (schemas, extraSearchPath) $ viewsKeyDependencies cols prepared
-  m2oRels <- SQL.statement mempty $ allM2ORels tabs cols prepared
+  m2oRels <- SQL.statement mempty $ allM2ORels tabs prepared
   procs   <- SQL.statement schemas $ allProcs pgVer prepared
 
   --let rels     = addO2MRels . addM2MRels $ addViewM2ORels keyDeps m2oRels
@@ -155,9 +155,9 @@ decodeColumns tables =
       <*> nullableColumn HD.text
       <*> nullableColumn HD.text
 
-decodeRels :: [Table] -> [Column] -> HD.Result [Relationship]
-decodeRels tables cols =
-  mapMaybe (relFromRow tables cols) <$> HD.rowList relRow
+decodeRels :: [Table] -> HD.Result [Relationship]
+decodeRels tables =
+  mapMaybe (relFromRow tables) <$> HD.rowList relRow
  where
   relRow = (,,,,,,)
     <$> column HD.text
@@ -424,43 +424,6 @@ When having t1_view.c1 and a t2_view.c2 source columns, we need to add a View-Vi
 The logic for composite pks is similar just need to make sure all the Relationship columns have source columns.
 -}
 --addViewM2ORels :: [ViewKeyDependency] -> [Relationship] -> [Relationship]
---addViewM2ORels keyDeps = concatMap (\rel@Relationship{..} -> rel :
-  --let
-    --srcColsGroupedByView :: [Column] -> [[ViewKeyDependency]]
-    --srcColsGroupedByView relCols = L.groupBy (\(_, viewCol1) (_, viewCol2) -> colTable viewCol1 == colTable viewCol2) $
-                   --filter (\ViewKeyDependency _ depType c _) -> depType `elem` [FKDep, FKDepRef] && c `elem` relCols) keyDeps
-    --relSrcCols = srcColsGroupedByView relColumns
-    --relFSrcCols = srcColsGroupedByView relForeignColumns
-    --getView :: [SourceColumn] -> Table
-    --getView = colTable . snd . unsafeHead
-    --srcCols `allSrcColsOf` cols = S.fromList (fst <$> srcCols) == S.fromList cols
-    ---- Relationship is dependent on the order of relColumns and relFColumns to get the join conditions right in the generated query.
-    ---- So we need to change the order of the SourceColumns to match the relColumns
-    ---- TODO: This could be avoided if the Relationship type is improved with a structure that maintains the association of relColumns and relFColumns
-    --srcCols `sortAccordingTo` cols = sortOn (\(k, _) -> L.lookup k $ zip cols [0::Int ..]) srcCols
-
-    --viewTableM2O =
-      --[ Relationship
-          --(getView srcCols) (snd <$> srcCols `sortAccordingTo` relColumns)
-          --relForeignTable relForeignColumns relCardinality
-       -- | srcCols <- relSrcCols, srcCols `allSrcColsOf` relColumns ]
-
-    --tableViewM2O =
-      --[ Relationship
-          --relTable relColumns
-          --(getView fSrcCols) (snd <$> fSrcCols `sortAccordingTo` relForeignColumns)
-          --relCardinality
-       -- | fSrcCols <- relFSrcCols, fSrcCols `allSrcColsOf` relForeignColumns ]
-
-    --viewViewM2O =
-      --[ Relationship
-          --(getView srcCols) (snd <$> srcCols `sortAccordingTo` relColumns)
-          --(getView fSrcCols) (snd <$> fSrcCols `sortAccordingTo` relForeignColumns)
-          --relCardinality
-       -- | srcCols  <- relSrcCols, srcCols `allSrcColsOf` relColumns
-      --, fSrcCols <- relFSrcCols, fSrcCols `allSrcColsOf` relForeignColumns ]
-
-  --in viewTableM2O ++ tableViewM2O ++ viewViewM2O)
 
 addO2MRels :: [Relationship] -> [Relationship]
 addO2MRels rels = rels ++ [ Relationship ft fc t c (O2M cons)
@@ -662,9 +625,9 @@ columnFromRow tabs (s, t, n, desc, nul, typ, l, d, e) = buildColumn <$> table
     parseEnum :: Maybe Text -> [Text]
     parseEnum = maybe [] (split (==','))
 
-allM2ORels :: [Table] -> [Column] -> Bool -> SQL.Statement () [Relationship]
-allM2ORels tabs cols =
-  SQL.Statement sql HE.noParams (decodeRels tabs cols)
+allM2ORels :: [Table] -> Bool -> SQL.Statement () [Relationship]
+allM2ORels tabs =
+  SQL.Statement sql HE.noParams (decodeRels tabs)
  where
   sql = [q|
     SELECT ns1.nspname AS table_schema,
@@ -689,15 +652,12 @@ allM2ORels tabs cols =
     WHERE confrelid != 0
     ORDER BY (conrelid, column_info.nums) |]
 
-relFromRow :: [Table] -> [Column] -> (Text, Text, Text, [Text], Text, Text, [Text]) -> Maybe Relationship
-relFromRow allTabs allCols (rs, rt, cn, rcs, frs, frt, frcs) =
-  Relationship <$> table <*> cols <*> tableF <*> colsF <*> pure (M2O cn)
+relFromRow :: [Table] -> (Text, Text, Text, [Text], Text, Text, [Text]) -> Maybe Relationship
+relFromRow allTabs (rs, rt, cn, rcs, frs, frt, frcs) =
+  Relationship <$> table <*> pure rcs <*> tableF <*> pure frcs <*> pure (M2O cn)
   where
-    findCol s t c = find (\col -> tableSchema (colTable col) == s && tableName (colTable col) == t && colName col == c) allCols
     table  = findTable rs rt allTabs
     tableF = findTable frs frt allTabs
-    cols  = mapM (findCol rs rt) rcs
-    colsF = mapM (findCol frs frt) frcs
 
 allPrimaryKeys :: [Table] -> Bool -> SQL.Statement () [Table]
 allPrimaryKeys tabs =

@@ -97,10 +97,10 @@ makeProperty rels col = (colName col, Inline s)
       let
         -- Finds the relationship that has a single column foreign key
         rel = find (\case
-          Relationship{relColumns, relCardinality=M2O _} -> [col] == relColumns
+          Relationship{relColumns, relCardinality=M2O _} -> [colName col] == relColumns
           _                                                 -> False
           ) rels
-        fCol = colName <$> (headMay . relForeignColumns =<< rel)
+        fCol = (headMay . relForeignColumns =<< rel)
         fTbl = tableName . relForeignTable <$> rel
         fTblCol = (,) <$> fTbl <*> fCol
       in

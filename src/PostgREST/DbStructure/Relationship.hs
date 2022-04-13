@@ -10,7 +10,8 @@ module PostgREST.DbStructure.Relationship
 
 import qualified Data.Aeson as JSON
 
-import PostgREST.DbStructure.Table (Column (..), Table (..))
+import PostgREST.DbStructure.Table (Table (..))
+import PostgREST.DbStructure.Identifiers (FieldName)
 
 import Protolude
 
@@ -23,9 +24,9 @@ import Protolude
 -- TODO merge relColumns and relForeignColumns to a tuple or Data.Bimap
 data Relationship = Relationship
   { relTable          :: Table
-  , relColumns        :: [Column]
+  , relColumns        :: [FieldName]
   , relForeignTable   :: Table
-  , relForeignColumns :: [Column]
+  , relForeignColumns :: [FieldName]
   , relCardinality    :: Cardinality
   }
   deriving (Eq, Generic, JSON.ToJSON)
@@ -45,9 +46,9 @@ type FKConstraint = Text
 data Junction = Junction
   { junTable       :: Table
   , junConstraint1 :: FKConstraint
-  , junColumns1    :: [Column]
+  , junColumns1    :: [FieldName]
   , junConstraint2 :: FKConstraint
-  , junColumns2    :: [Column]
+  , junColumns2    :: [FieldName]
   }
   deriving (Eq, Generic, JSON.ToJSON)
 
