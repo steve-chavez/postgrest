@@ -13,6 +13,7 @@ module PostgREST.Error
   , errorPayload
   , checkIsFatal
   , singularityError
+  , queryErrorToUsageError
   ) where
 
 import qualified Data.Aeson                as JSON
@@ -193,6 +194,9 @@ relHint rels = T.intercalate ", " (hintList <$> rels)
 
 data PgError = PgError Authenticated SQL.UsageError
 type Authenticated = Bool
+
+queryErrorToUsageError :: SQL.QueryError -> SQL.UsageError
+queryErrorToUsageError qe = SQL.SessionError qe
 
 instance PgrstError PgError where
   status (PgError authed usageError) = pgErrorStatus authed usageError

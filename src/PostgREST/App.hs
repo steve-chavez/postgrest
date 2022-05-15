@@ -31,6 +31,8 @@ import qualified Data.ByteString.Lazy            as LBS
 import qualified Data.HashMap.Strict             as M
 import qualified Data.Set                        as S
 import qualified Hasql.DynamicStatements.Snippet as SQL (Snippet)
+import qualified Hasql.Connection                as Conn
+import qualified Hasql.Session                   as Sess
 import qualified Hasql.Pool                      as SQL
 import qualified Hasql.Transaction               as SQL
 import qualified Hasql.Transaction.Sessions      as SQL
@@ -207,19 +209,21 @@ postgrestResponse conf@AppConfig{..} maybeDbStructure jsonDbS pgVer pool AuthRes
 
   let handleReq apiReq = handleRequest $ RequestContext conf dbStructure apiReq pgVer
 
-  runDbHandler pool (txMode apiRequest) (Just authRole /= configDbAnonRole) configDbPreparedStatements .
+  runDbHandler configDbUri pool (txMode apiRequest) (Just authRole /= configDbAnonRole) configDbPreparedStatements .
     Middleware.optionalRollback conf apiRequest $
       Middleware.runPgLocals conf authClaims authRole handleReq apiRequest jsonDbS pgVer
 
-runDbHandler :: SQL.Pool -> SQL.Mode -> Bool -> Bool -> DbHandler a -> Handler IO a
-runDbHandler pool mode authenticated prepared handler = do
-  dbResp <-
-    let transaction = if prepared then SQL.transaction else SQL.unpreparedTransaction in
-    lift . SQL.use pool . transaction SQL.ReadCommitted mode $ runExceptT handler
+runDbHandler :: Text -> SQL.Pool -> SQL.Mode -> Bool -> Bool -> DbHandler a -> Handler IO a
+runDbHandler dbUri _ mode authenticated prepared handler = do
+  dbResp <- do
+      let transaction = if prepared then SQL.transaction else SQL.unpreparedTransaction
+      Right conn <- lift $ Conn.acquire (toUtf8 dbUri)
+
+      lift . flip Sess.run conn . transaction SQL.ReadCommitted mode $ runExceptT handler
 
   resp <-
     liftEither . mapLeft Error.PgErr $
-      mapLeft (Error.PgError authenticated) dbResp
+      mapLeft (Error.PgError authenticated . Error.queryErrorToUsageError) dbResp
 
   liftEither resp
 
