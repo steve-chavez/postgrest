@@ -1447,3 +1447,6 @@ spec actualPgVersion =
               { matchStatus  = 400
               , matchHeaders = [matchContentTypeJson]
               }
+
+    it "should work on a function that returns setof record" $
+      get "/rpc/setof_record" `shouldRespondWith` 200

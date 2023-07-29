@@ -3329,3 +3329,9 @@ create table tournaments(
   id bigint primary key,
   status bigint references status(id)
 );
+
+create function setof_record() returns setof record
+language sql
+as $$
+  select * from projects limit 1;
+$$;
