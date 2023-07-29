@@ -155,7 +155,7 @@ invokeQuery rout CallReadPlan{crReadPlan, crCallPlan, crResAgg} apiReq@ApiReques
     lift . SQL.statement mempty $
       Statements.prepareCall
         rout
-        (QueryBuilder.callPlanToQuery crCallPlan pgVer)
+        (QueryBuilder.callPlanToQuery rout crCallPlan pgVer)
         (QueryBuilder.readPlanToQuery crReadPlan)
         (QueryBuilder.readPlanToCountQuery crReadPlan)
         (shouldCount preferCount)

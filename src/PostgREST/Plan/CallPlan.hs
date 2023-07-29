@@ -20,9 +20,6 @@ data CallPlan = FunctionCall
   { funCQi                :: QualifiedIdentifier
   , funCParams            :: CallParams
   , funCArgs              :: Maybe LBS.ByteString
-  , funCScalar            :: Bool
-  , funCSetOfScalar       :: Bool
-  , funCRetCompositeAlias :: Bool
   , funCReturning         :: [FieldName]
   }
 

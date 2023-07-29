@@ -14,6 +14,7 @@ module PostgREST.SchemaCache.Routine
   , funcReturnsVoid
   , funcTableName
   , funcReturnsCompositeAlias
+  , funcReturnsSetOfRecord
   , ResultAggregate(..)
   ) where
 
@@ -97,6 +98,7 @@ data ResultAggregate
    | NoAgg
    deriving (Eq, Show)
 
+-- TODO: cache these attributes on the Function type when SchemaCache is created
 funcReturnsScalar :: Routine -> Bool
 funcReturnsScalar proc = case proc of
   Function{pdReturnType = Single (Scalar{})} -> True
@@ -104,8 +106,14 @@ funcReturnsScalar proc = case proc of
 
 funcReturnsSetOfScalar :: Routine -> Bool
 funcReturnsSetOfScalar proc = case proc of
+  Function{pdReturnType = SetOf (Scalar (QualifiedIdentifier "pg_catalog" "record"))} -> False
   Function{pdReturnType = SetOf (Scalar{})} -> True
   _                                         -> False
+
+funcReturnsSetOfRecord :: Routine -> Bool
+funcReturnsSetOfRecord proc = case proc of
+  Function{pdReturnType = SetOf (Scalar (QualifiedIdentifier "pg_catalog" "record"))} -> True
+  _                                                                                   -> False
 
 funcReturnsCompositeAlias :: Routine -> Bool
 funcReturnsCompositeAlias proc = case proc of

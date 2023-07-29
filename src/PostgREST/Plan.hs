@@ -63,9 +63,9 @@ import PostgREST.SchemaCache.Routine         (ResultAggregate (..),
                                               Routine (..),
                                               RoutineMap,
                                               RoutineParam (..),
-                                              funcReturnsCompositeAlias,
                                               funcReturnsScalar,
-                                              funcReturnsSetOfScalar)
+                                              funcReturnsSetOfScalar,
+                                              funcReturnsSetOfRecord)
 import PostgREST.SchemaCache.Table           (Column (..), Table (..),
                                               TablesMap,
                                               tableColumnsList,
@@ -746,9 +746,6 @@ callPlan proc ApiRequest{iPreferences=Preferences{..}} paramKeys args readReq = 
   funCQi = QualifiedIdentifier (pdSchema proc) (pdName proc)
 , funCParams = callParams
 , funCArgs = Just args
-, funCScalar = funcReturnsScalar proc
-, funCSetOfScalar = funcReturnsSetOfScalar proc
-, funCRetCompositeAlias = funcReturnsCompositeAlias proc
 , funCReturning = inferColsEmbedNeeds readReq []
 }
   where
@@ -817,7 +814,8 @@ binaryField :: AppConfig -> MediaType -> Maybe Routine -> ReadPlanTree -> Either
 binaryField AppConfig{configRawMediaTypes} acceptMediaType proc rpTree
   | isRawMediaType =
     if (funcReturnsScalar <$> proc) == Just True ||
-       (funcReturnsSetOfScalar <$> proc) == Just True
+       (funcReturnsSetOfScalar <$> proc) == Just True ||
+       (funcReturnsSetOfRecord <$> proc) == Just True
       then Right $ Just "pgrst_scalar"
       else
         let

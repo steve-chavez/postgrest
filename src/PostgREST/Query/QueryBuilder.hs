@@ -29,7 +29,7 @@ import PostgREST.SchemaCache.Relationship (Cardinality (..),
                                            Junction (..),
                                            Relationship (..),
                                            relIsToOne)
-import PostgREST.SchemaCache.Routine      (RoutineParam (..))
+import PostgREST.SchemaCache.Routine      (Routine, RoutineParam (..), funcReturnsScalar, funcReturnsSetOfScalar, funcReturnsCompositeAlias, funcReturnsSetOfRecord)
 
 import PostgREST.ApiRequest.Types
 import PostgREST.Plan.CallPlan
@@ -163,9 +163,9 @@ mutatePlanToQuery (Delete mainQi logicForest range ordts returnings)
     whereLogic = if null logicForest then mempty else " WHERE " <> intercalateSnippet " AND " (pgFmtLogicTree mainQi <$> logicForest)
     (whereRangeIdF, rangeIdF) = mutRangeF mainQi (cfName . coField <$> ordts)
 
-callPlanToQuery :: CallPlan -> PgVersion -> SQL.Snippet
-callPlanToQuery (FunctionCall qi params args returnsScalar returnsSetOfScalar returnsCompositeAlias returnings) pgVer =
-  "SELECT " <> (if returnsScalar || returnsSetOfScalar then "pgrst_call AS pgrst_scalar " else returnedColumns) <> " " <>
+callPlanToQuery :: Routine -> CallPlan -> PgVersion -> SQL.Snippet
+callPlanToQuery func (FunctionCall qi params args returnings) pgVer =
+  "SELECT " <> (if funcReturnsScalar func || funcReturnsSetOfScalar func || traceShowId (funcReturnsSetOfRecord func) then "pgrst_call AS pgrst_scalar " else returnedColumns) <> " " <>
   fromCall
   where
     fromCall = case params of
@@ -175,8 +175,8 @@ callPlanToQuery (FunctionCall qi params args returnsScalar returnsSetOfScalar re
                          "LATERAL " <> callIt (fmtParams prms)
 
     callIt :: SQL.Snippet -> SQL.Snippet
-    callIt argument | pgVer < pgVersion130 && pgVer >= pgVersion110 && returnsCompositeAlias = "(SELECT (" <> fromQi qi <> "(" <> argument <> ")).*) pgrst_call"
-                    | otherwise                                                              = fromQi qi <> "(" <> argument <> ") pgrst_call"
+    callIt argument | pgVer < pgVersion130 && pgVer >= pgVersion110 && funcReturnsCompositeAlias func = "(SELECT (" <> fromQi qi <> "(" <> argument <> ")).*) pgrst_call"
+                    | otherwise                                                                       = fromQi qi <> "(" <> argument <> ") pgrst_call"
 
     fmtParams :: [RoutineParam] -> SQL.Snippet
     fmtParams prms = intercalateSnippet ", "
