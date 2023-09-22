@@ -19,6 +19,7 @@ module PostgREST.Response
   , isServiceUnavailable
   , traceHeaderMiddleware
   , ServerTimingParams(..)
+  , PgrstResponse(..)
   ) where
 
 import qualified Data.Aeson                as JSON
@@ -73,13 +74,18 @@ newtype ServerTimingParams = ServerTimingParams {
   jwtDur :: Double
 }
 
-readResponse :: WrappedReadPlan -> Bool -> QualifiedIdentifier -> ApiRequest -> ResultSet -> Maybe ServerTimingParams -> Wai.Response
+data PgrstResponse = PgrstResponse {
+  pgrstStatus  :: HTTP.Status
+, pgrstHeaders :: [HTTP.Header]
+, pgrstBody    :: LBS.ByteString
+}
+
+readResponse :: WrappedReadPlan -> Bool -> QualifiedIdentifier -> ApiRequest -> ResultSet -> Maybe ServerTimingParams -> Either Error.Error PgrstResponse
 readResponse WrappedReadPlan{wrMedia} headersOnly identifier ctxApiRequest@ApiRequest{iPreferences=Preferences{..},..} resultSet serverTimingParams =
   case resultSet of
     RSStandard{..} -> do
       let
         (status, contentRange) = RangeQuery.rangeStatusHeader iTopLevelRange rsQueryTotal rsTableTotal
-        response = gucResponse rsGucStatus rsGucHeaders
         prefHeader = maybeToList . prefAppliedHeader $ Preferences Nothing Nothing Nothing preferCount preferTransaction Nothing
         headers =
           [ contentRange
@@ -92,15 +98,18 @@ readResponse WrappedReadPlan{wrMedia} headersOnly identifier ctxApiRequest@ApiRe
           ++ contentTypeHeaders wrMedia ctxApiRequest
           ++ prefHeader
           ++ serverTimingHeader serverTimingParams
-        rsOrErrBody = if status == HTTP.status416
-          then Error.errorPayload $ Error.ApiRequestError $ ApiRequestTypes.InvalidRange
-            $ ApiRequestTypes.OutOfBounds (show $ RangeQuery.rangeOffset iTopLevelRange) (maybe "0" show rsTableTotal)
-          else LBS.fromStrict rsBody
 
-      response status headers $ if headersOnly then mempty else rsOrErrBody
+      (ovStatus, ovHeaders) <- overrideStatusHeaders rsGucStatus rsGucHeaders status headers
+
+      let bod | status == HTTP.status416 = Error.errorPayload $ Error.ApiRequestError $ ApiRequestTypes.InvalidRange $
+                                           ApiRequestTypes.OutOfBounds (show $ RangeQuery.rangeOffset iTopLevelRange) (maybe "0" show rsTableTotal)
+              | headersOnly              = mempty
+              | otherwise                = LBS.fromStrict rsBody
+
+      Right $ PgrstResponse ovStatus ovHeaders bod
 
     RSPlan plan ->
-      Wai.responseLBS HTTP.status200 (contentTypeHeaders wrMedia ctxApiRequest) $ LBS.fromStrict plan
+      Right $ PgrstResponse HTTP.status200 (contentTypeHeaders wrMedia ctxApiRequest) $ LBS.fromStrict plan
 
 createResponse :: QualifiedIdentifier -> MutateReadPlan -> ApiRequest -> ResultSet -> Maybe ServerTimingParams -> Wai.Response
 createResponse QualifiedIdentifier{..} MutateReadPlan{mrMutatePlan, mrMedia} ctxApiRequest@ApiRequest{iPreferences=Preferences{..}, ..} resultSet serverTimingParams = case resultSet of
@@ -247,6 +256,13 @@ openApiResponse versions headersOnly body conf sCache schema negotiatedByProfile
   Wai.responseLBS HTTP.status200
     (MediaType.toContentType MTOpenAPI : maybeToList (profileHeader schema negotiatedByProfile))
     (maybe mempty (\(x, y, z) -> if headersOnly then mempty else OpenAPI.encode versions conf sCache x y z) body)
+
+-- Status and headers can be overridden as per https://postgrest.org/en/stable/references/transactions.html#response-headers
+overrideStatusHeaders :: Maybe Text -> Maybe BS.ByteString -> HTTP.Status -> [HTTP.Header]-> Either Error.Error (HTTP.Status, [HTTP.Header])
+overrideStatusHeaders rsGucStatus rsGucHeaders pgrstStatus pgrstHeaders = do
+  gucStatus <- decodeGucStatus rsGucStatus
+  gucHeaders <- decodeGucHeaders rsGucHeaders
+  Right (fromMaybe pgrstStatus gucStatus, addHeadersIfNotIncluded pgrstHeaders $ map unwrapGucHeader gucHeaders)
 
 -- | Response with headers and status overridden from GUCs.
 gucResponse

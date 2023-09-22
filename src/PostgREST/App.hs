@@ -172,7 +172,8 @@ handleRequest AuthResult{..} conf appState authenticated prepared pgVer apiReq@A
     (ActionRead headersOnly, TargetIdent identifier) -> do
       wrPlan <- liftEither $ Plan.wrappedReadPlan identifier conf sCache apiReq
       resultSet <- runQuery roleIsoLvl (Plan.wrTxMode wrPlan) $ Query.readQuery wrPlan conf apiReq
-      return $ Response.readResponse wrPlan headersOnly identifier apiReq resultSet serverTimingParams
+      pgrst <- liftEither $ Response.readResponse wrPlan headersOnly identifier apiReq resultSet serverTimingParams
+      return $ pgrstResponse pgrst
 
     (ActionMutate MutationCreate, TargetIdent identifier) -> do
       mrPlan <- liftEither $ Plan.mutateReadPlan MutationCreate apiReq identifier conf sCache
@@ -226,3 +227,6 @@ handleRequest AuthResult{..} conf appState authenticated prepared pgVer apiReq@A
         Query.setPgLocals conf authClaims authRole (HM.toList roleSettings) apiReq pgVer
         Query.runPreReq conf
         query
+
+    pgrstResponse :: Response.PgrstResponse -> Wai.Response
+    pgrstResponse (Response.PgrstResponse st hdrs bod) = Wai.responseLBS st hdrs bod
