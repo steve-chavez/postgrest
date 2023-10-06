@@ -11,6 +11,7 @@ module PostgREST.Error
   , PgError(..)
   , Error(..)
   , errorPayload
+  , toJsonPgrstError
   ) where
 
 import qualified Data.Aeson                as JSON
@@ -94,12 +95,16 @@ instance PgrstError ApiRequestError where
   headers SingularityError{}     = [MediaType.toContentType $ MTSingularJSON False]
   headers _ = mempty
 
+toJsonPgrstError :: ErrorCode -> Text -> Text -> JSON.Value -> JSON.Value
+toJsonPgrstError code msg details hint = JSON.object [
+    "code"    .= code
+  , "message" .= msg
+  , "details" .= details
+  , "hint"    .= hint
+  ]
+
 instance JSON.ToJSON ApiRequestError where
-  toJSON (QueryParamError (QPError message details)) = JSON.object [
-    "code"    .= ApiRequestErrorCode00,
-    "message" .= message,
-    "details" .= details,
-    "hint"    .= JSON.Null]
+  toJSON (QueryParamError (QPError message details)) = toJsonPgrstError ApiRequestErrorCode00 message details JSON.Null
   toJSON (InvalidRpcMethod method) = JSON.object [
     "code"    .= ApiRequestErrorCode01,
     "message" .= ("Cannot use the " <> T.decodeUtf8 method <> " method on RPC"),
