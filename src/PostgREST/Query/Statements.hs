@@ -56,8 +56,8 @@ data ResultSet
 
 
 prepareWrite :: SQL.Snippet -> SQL.Snippet -> Bool -> Bool -> MediaType -> MediaHandler ->
-                Maybe PreferRepresentation -> Maybe PreferResolution -> [Text] -> Bool -> SQL.Statement () ResultSet
-prepareWrite selectQuery mutateQuery isInsert isPut mt handler rep resolution pKeys =
+                Maybe PreferRepresentation -> Maybe PreferResolution -> [Text] -> Bool -> Bool -> SQL.Statement () ResultSet
+prepareWrite selectQuery mutateQuery isInsert isPut mt handler rep resolution pKeys countPageTotal =
   SQL.dynamicallyParameterized (mtSnippet mt snippet) decodeIt
  where
   checkUpsert snip = if isInsert && (isPut || resolution == Just MergeDuplicates) then snip else "''"
@@ -66,13 +66,16 @@ prepareWrite selectQuery mutateQuery isInsert isPut mt handler rep resolution pK
     "WITH " <> sourceCTE <> " AS (" <> mutateQuery <> ") " <>
     "SELECT " <>
       "'' AS total_result_set, " <>
-      "pg_catalog.count(_postgrest_t) AS page_total, " <>
+      (if countPageTotal
+        then "pg_catalog.count(_postgrest_t)"
+        else "0") <> " AS page_total, " <>
       locF <> " AS header, " <>
       handlerF Nothing handler <> " AS body, " <>
       responseHeadersF <> " AS response_headers, " <>
       responseStatusF  <> " AS response_status, " <>
       pgrstInsertedF <> " AS response_inserted " <>
-    "FROM (" <> selectF <> ") _postgrest_t"
+    "FROM (" <> selectF <> ") _postgrest_t" <>
+    (if countPageTotal then "" else " LIMIT 1")
 
   locF =
     if isInsert && rep == Just HeadersOnly
@@ -155,7 +158,8 @@ preparePlanRows countQuery =
 
 standardRow :: Bool -> HD.Row ResultSet
 standardRow noLocation =
-  RSStandard <$> nullableColumn HD.int8 <*> column HD.int8
+  RSStandard <$> nullableColumn HD.int8
+             <*> column HD.int8
              <*> (if noLocation then pure mempty else fmap splitKeyValue <$> arrayColumn HD.bytea)
              <*> (fromMaybe mempty <$> nullableColumn HD.bytea)
              <*> nullableColumn HD.bytea

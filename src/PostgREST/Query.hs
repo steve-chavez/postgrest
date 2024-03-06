@@ -33,6 +33,7 @@ import qualified PostgREST.SchemaCache        as SchemaCache
 
 import PostgREST.ApiRequest              (ApiRequest (..))
 import PostgREST.ApiRequest.Preferences  (PreferCount (..),
+                                          PreferRepresentation(..),
                                           PreferHandling (..),
                                           PreferMaxAffected (..),
                                           PreferTimezone (..),
@@ -57,7 +58,7 @@ import PostgREST.Query.Statements        (ResultSet (..))
 import PostgREST.SchemaCache             (SchemaCache (..))
 import PostgREST.SchemaCache.Identifiers (QualifiedIdentifier (..),
                                           Schema)
-import PostgREST.SchemaCache.Routine     (Routine (..), RoutineMap)
+import PostgREST.SchemaCache.Routine     (Routine (..), RoutineMap, MediaHandler(..))
 import PostgREST.SchemaCache.Table       (TablesMap)
 
 import Protolude hiding (Handler)
@@ -191,6 +192,7 @@ writeQuery :: MutateReadPlan -> ApiRequest -> AppConfig  -> DbHandler ResultSet
 writeQuery MutateReadPlan{..} ApiRequest{iPreferences=Preferences{..}} conf =
   let
     (isPut, isInsert, pkCols) = case mrMutatePlan of {Insert{where_,insPkCols} -> ((not . null) where_, True, insPkCols); _ -> (False,False, mempty);}
+    countPageTotal = shouldCount preferCount || preferRepresentation == (Just Full) || isJust preferMaxAffected || isPut || (mrMedia `elem` [MTVndSingularJSON True, MTVndSingularJSON False])
   in
   lift . SQL.statement mempty $
     Statements.prepareWrite
@@ -203,6 +205,7 @@ writeQuery MutateReadPlan{..} ApiRequest{iPreferences=Preferences{..}} conf =
       preferRepresentation
       preferResolution
       pkCols
+      countPageTotal
       (configDbPreparedStatements conf)
 
 -- |
