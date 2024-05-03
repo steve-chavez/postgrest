@@ -64,14 +64,22 @@ let
           postgresql = super.libpq;
         });
 
-      hasql-notifications = lib.dontCheck (prev.callHackageDirect
-        {
-          pkg = "hasql-notifications";
-          ver = "0.2.1.1";
-          sha256 = "sha256-oPhKA/pSQGJvgQyhsi7CVr9iDT7uWpKUz0iJfXsaxXo=";
-        }
-        { }
-      );
+      #hasql-notifications = lib.dontCheck (prev.callHackageDirect
+        #{
+          #pkg = "hasql-notifications";
+          #ver = "0.2.1.1";
+          #sha256 = "sha256-oPhKA/pSQGJvgQyhsi7CVr9iDT7uWpKUz0iJfXsaxXo=";
+        #}
+        #{ }
+      #);
+
+      hasql-notifications =
+        lib.dontCheck (prev.callCabal2nixWithOptions "hasql-notifications" (super.fetchFromGitHub {
+          owner = "diogob";
+          repo  = "hasql-notifications";
+          rev = "490179571542f17c4549ade2d3e86a8166857ae1";
+          sha256 = "sha256-yWPjnJC7pprw3svayS0TnYo4pOui28v0VHZuLyZ2ojo=";
+       }) "--subpath=." {});
 
     };
 in

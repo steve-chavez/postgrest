@@ -502,9 +502,9 @@ listener appState@AppState{stateObserver=observer} conf@AppConfig{..} = do
     dbOrError <- acquire $ toUtf8 (addFallbackAppName prettyVersion configDbUri)
     case dbOrError of
       Right db -> do
-        observer $ DBListenerStart dbChannel
-        putIsListenerOn appState True
         SQL.listen db $ SQL.toPgIdentifier dbChannel
+        putIsListenerOn appState True
+        observer $ DBListenerStart dbChannel
         SQL.waitForNotifications handleNotification db
 
       Left err -> do
