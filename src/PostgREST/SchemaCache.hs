@@ -1171,6 +1171,33 @@ mediaHandlers pgVer =
           WHERE
             t.typbasetype <> 0 and
             (t.typname ~* '^[A-Za-z0-9.-]+/[A-Za-z0-9.\+-]+$' or t.typname = '*/*')
+      ),
+      scalar_handlers as (
+        select
+            typ_sch.nspname as handler_schema,
+            mtype.typname   as handler_name,
+            pro_sch.nspname as target_schema,
+            proname         as target_name,
+            mtype.typname   as media_type,
+            mtype.resolved_media_type
+        from pg_proc proc
+          join pg_namespace pro_sch on pro_sch.oid = proc.pronamespace
+          join media_types mtype on proc.prorettype = mtype.oid
+          join pg_namespace typ_sch     on typ_sch.oid = mtype.typnamespace
+        where
+          pro_sch.nspname = ANY($1) and NOT proretset
+          |] <> (if pgVer >= pgVersion110 then " AND prokind = 'f'" else " AND NOT (proisagg OR proiswindow)") <> [q|
+      ),
+      implicit_any_scalar_handler as (
+        select
+            handler_schema,
+            handler_name,
+            target_schema,
+            target_name,
+            '*/*' as media_type,
+            resolved_media_type
+        from scalar_handlers
+        where media_type <> '*/*'
       )
       select
         proc_schema.nspname           as handler_schema,
@@ -1190,20 +1217,10 @@ mediaHandlers pgVer =
         proc.pronargs = 1 and
         arg_name.oid in (select reltype from all_relations)
       union
-      select
-          typ_sch.nspname as handler_schema,
-          mtype.typname   as handler_name,
-          pro_sch.nspname as target_schema,
-          proname         as target_name,
-          mtype.typname   as media_type,
-          mtype.resolved_media_type
-      from pg_proc proc
-        join pg_namespace pro_sch on pro_sch.oid = proc.pronamespace
-        join media_types mtype on proc.prorettype = mtype.oid
-        join pg_namespace typ_sch     on typ_sch.oid = mtype.typnamespace
-      where
-        pro_sch.nspname = ANY($1) and NOT proretset
-      |] <> (if pgVer >= pgVersion110 then " AND prokind = 'f'" else " AND NOT (proisagg OR proiswindow)")
+      select * from scalar_handlers
+      union
+      select * from implicit_any_scalar_handler
+      |]
 
 decodeMediaHandlers :: HD.Result MediaHandlerMap
 decodeMediaHandlers =
