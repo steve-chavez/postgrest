@@ -43,6 +43,7 @@ module PostgREST.Query.SqlFragment
   , schemaDescription
   , accessibleTables
   , accessibleFuncs
+  , addQueryTags
   ) where
 
 import qualified Data.Aeson                      as JSON
@@ -107,6 +108,15 @@ sourceCTE = "pgrst_source"
 
 noLocationF :: SQL.Snippet
 noLocationF = "array[]::text[]"
+
+-- sqlcommenter style
+addQueryTags :: [(Text, Text)] -> SQL.Snippet -> SQL.Snippet
+addQueryTags tags sql =
+  if tags == mempty
+    then sql
+    else sql <> SQL.sql (encodeUtf8 qTags)
+  where
+    qTags = " /*" <> T.intercalate ", " ((\(k, v)-> k <> "=" <> v) <$> tags) <> "*/"
 
 simpleOperator :: SimpleOperator -> SQL.Snippet
 simpleOperator = \case

@@ -8,6 +8,7 @@ TODO: This module shouldn't depend on SchemaCache: once OpenAPI is removed, this
 module PostgREST.Query
   ( mainQuery
   , MainQuery (..)
+  , tag
   ) where
 
 import qualified Hasql.DynamicStatements.Snippet as SQL hiding (sql)
@@ -56,3 +57,9 @@ mainQuery (Db plan) conf@AppConfig{..} apiReq@ApiRequest{iPreferences=Preference
       genQ (Statements.mainCall crProc crCallPlan crReadPlan preferCount pMedia crHandler) (mempty, mempty, mempty) mempty
     MayUseDb InspectPlan{ipSchema=tSchema} ->
       genQ mempty (SqlFragment.accessibleTables tSchema, SqlFragment.accessibleFuncs tSchema, SqlFragment.schemaDescription tSchema) mempty
+
+tag :: [(Text, Text)] -> MainQuery -> MainQuery
+tag tags mq@MainQuery{..} =
+  mq{mqTxVars=tag' mqTxVars, mqPreReq=tag' <$> mqPreReq, mqMain=tag' mqMain, mqExplain=tag' <$> mqExplain}
+  where
+    tag' = SqlFragment.addQueryTags tags

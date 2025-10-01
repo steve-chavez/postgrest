@@ -3846,3 +3846,7 @@ $$ language sql;
 
 create function do_nothing() returns void as $_$
 $_$ language sql;
+
+create function prepareds() returns SETOF pg_catalog.pg_prepared_statements as $$
+  select * from pg_prepared_statements;
+$$ language sql;

@@ -75,7 +75,7 @@ let
 
           log "Starting the database cluster..."
           # Instead of listening on a local port, we will listen on a unix domain socket.
-          pg_ctl -l "$tmpdir/db.log" -w start -o "-F -c listen_addresses=\"\" -c hba_file=$HBA_FILE -k $PGHOST -c log_statement=\"all\" " \
+          pg_ctl -l "$tmpdir/db.log" -w start -o "-F -c shared_preload_libraries=pg_stat_statements -c listen_addresses=\"\" -c hba_file=$HBA_FILE -k $PGHOST -c log_statement=\"all\" " \
             >> "$setuplog"
 
           log "Creating a minimally privileged $PGUSER connection role..."

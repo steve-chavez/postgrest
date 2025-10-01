@@ -23,6 +23,7 @@ import Data.String              (IsString (..))
 import Network.Wai.Handler.Warp (defaultSettings, setHost, setPort,
                                  setServerName)
 
+import qualified Data.CaseInsensitive   as CI
 import qualified Data.Text.Encoding       as T
 import qualified Network.Wai              as Wai
 import qualified Network.Wai.Handler.Warp as Warp
@@ -142,7 +143,13 @@ postgrestResponse appState conf@AppConfig{..} maybeSchemaCache authResult@AuthRe
   (parseTime, apiReq@ApiRequest{..}) <- withTiming $ liftEither . mapLeft Error.ApiRequestError $ ApiRequest.userApiRequest conf prefs req body
   (planTime, plan)                   <- withTiming $ liftEither $ Plan.actionPlan iAction conf apiReq sCache
 
-  let mainQ = Query.mainQuery plan conf apiReq authResult configDbPreRequest
+  let
+      header :: [(Text, Text)]
+      header = case configServerTraceHeader of
+                 Nothing  -> mempty
+                 Just hdr -> fromMaybe mempty $ L.singleton <$> ((,) <$> pure (decodeUtf8 $ CI.original hdr) <*> (decodeUtf8 <$> (L.lookup hdr $ Wai.requestHeaders req)))
+      mainQ = Query.tag header $
+              Query.mainQuery plan conf apiReq authResult configDbPreRequest
       tx = MainTx.mainTx mainQ conf authResult apiReq plan sCache
       observer = AppState.getObserver appState
       obsQuery s = when configLogQuery $ observer $ QueryObs mainQ s
