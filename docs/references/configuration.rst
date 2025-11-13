@@ -798,6 +798,26 @@ openapi-server-proxy-uri
       ]
     }
 
+.. _openapi-visibility:
+
+openapi-visibility
+------------------
+
+  =============== =================================
+  **Type**        String
+  **Default**     `n/a`
+  **Reloadable**  Y
+  **Environment** PGRST_OPENAPI_VISIBILITY
+  **In-Database** pgrst.openapi_visibility
+  =============== =================================
+
+  Specifies the postgres roles that are able to obtain the OpenAPI output.
+
+  .. code:: bash
+
+    # a comma-separated list of roles
+    openapi-mode = "authenticated, service_role"
+
 .. _server_cors_allowed_origins:
 
 server-cors-allowed-origins
