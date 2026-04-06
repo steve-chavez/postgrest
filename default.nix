@@ -20,6 +20,7 @@
     url = "https://github.com/${owner}/${repo}/archive/${rev}.tar.gz";
     sha256 = tarballHash;
   }
+
 }:
 
 let
@@ -50,8 +51,41 @@ let
   pkgs =
     import nixpkgs { inherit overlays system; };
 
+  orioledbPostgresql =
+    pkgs.postgresql_17.overrideAttrs
+      (old: {
+        pname = "postgresql-orioledb";
+        version = "${old.version}-orioledb-patches17_5";
+        src = pkgs.fetchFromGitHub {
+          owner = "orioledb";
+          repo = "postgres";
+          rev = "patches17_5";
+          hash = "sha256-DxfCXN/W7K7QGPZJjLs4LrRlcvmVW/7DYmrP6+xRhuk=";
+        };
+        jitSupport = false;
+        doInstallCheck = false;
+        doCheck = false;
+        checkTarget = "check";
+        #buildFlags = [ "world" ];
+        #installTargets = [ "install-world" ];
+      });
+
+  orioledbExtension =
+    pkgs.callPackage nix/tools/ext/orioledb.nix {
+      postgresql = orioledbPostgresql;
+  };
+
+  plpgsql-check = pkgs.callPackage ./nix/tools/ext/plpgsql-check.nix  {
+    postgresql = orioledbPostgresql;
+  };
+
+  plpgsql-check-17 = pkgs.callPackage ./nix/tools/ext/plpgsql-check.nix  {
+    postgresql = pkgs.postgresql_17;
+  };
+
   postgresqlVersions =
     [
+      { name = "pg-17-orioledb"; postgresql = orioledbPostgresql.withPackages (p: [ orioledbExtension ]); }
       { name = "pg-17"; postgresql = pkgs.postgresql_17.withPackages (p: [ p.postgis p.pg_safeupdate ]); }
       { name = "pg-16"; postgresql = pkgs.postgresql_16.withPackages (p: [ p.postgis p.pg_safeupdate ]); }
       { name = "pg-15"; postgresql = pkgs.postgresql_15.withPackages (p: [ p.postgis p.pg_safeupdate ]); }
