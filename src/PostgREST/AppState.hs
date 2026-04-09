@@ -352,8 +352,9 @@ retryingSchemaCacheLoad appState@AppState{stateObserver=observer, stateMainThrea
           -- IORef on putSchemaCache. This is why schema cache status is marked as pending here to signal the Admin server (using isPending) that we're on a recovery state.
           markSchemaCachePending appState
           putSchemaCache appState $ Just sCache
-          observer $ SchemaCacheQueriedObs resultTime
-          observer . uncurry SchemaCacheLoadedObs =<< timeItT (evaluate $ showSummary sCache)
+          (loadTime, summary) <- timeItT (evaluate $ showSummary sCache)
+          observer $ SchemaCacheQueriedObs resultTime $ dbQueryTimings sCache
+          observer $ SchemaCacheLoadedObs loadTime summary
           markSchemaCacheLoaded appState
           return $ Just sCache
 

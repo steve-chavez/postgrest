@@ -24,10 +24,14 @@ module PostgREST.SchemaCache
   , querySchemaCache
   , showSummary
   , decodeFuncs
+  , QueryTimings(..)
+  , queryTimingsWLabels
   ) where
 
-import           Data.Aeson                 ((.=))
-import qualified Data.Aeson                 as JSON
+import           Data.Aeson ((.=))
+import qualified Data.Aeson as JSON
+
+import qualified Data.ByteString.Char8      as BS
 import qualified Data.HashMap.Strict        as HM
 import qualified Data.HashMap.Strict.InsOrd as HMI
 import qualified Data.Set                   as S
@@ -40,7 +44,8 @@ import qualified Hasql.Transaction          as SQL
 import Data.Functor.Contravariant ((>$<))
 import NeatInterpolation          (trimming)
 
-import PostgREST.Config                      (AppConfig (..))
+import PostgREST.Config                      (AppConfig (..),
+                                              LogLevel (..))
 import PostgREST.Config.Database             (TimezoneNames,
                                               toIsolationLevel)
 import PostgREST.SchemaCache.Identifiers     (FieldName,
@@ -85,10 +90,11 @@ data SchemaCache = SchemaCache
   -- Since index construction can be expensive, we build it once and store in the SchemaCache
   -- Haskell lazy evaluation ensures it's only built on first use and memoized afterwards
   , dbTablesFuzzyIndex :: TablesFuzzyIndex
+  , dbQueryTimings     :: Maybe QueryTimings -- ^ cached time for the time each query took when debugging
   } deriving (Show)
 
 instance JSON.ToJSON SchemaCache where
-  toJSON (SchemaCache tabs rels routs reps hdlers tzs _) = JSON.object [
+  toJSON (SchemaCache tabs rels routs reps hdlers tzs _ _) = JSON.object [
       "dbTables"          .= JSON.toJSON tabs
     , "dbRelationships"   .= JSON.toJSON rels
     , "dbRoutines"        .= JSON.toJSON routs
@@ -98,7 +104,7 @@ instance JSON.ToJSON SchemaCache where
     ]
 
 showSummary :: SchemaCache -> Text
-showSummary (SchemaCache tbls rels routs reps mediaHdlrs tzs _) =
+showSummary (SchemaCache tbls rels routs reps mediaHdlrs tzs _ _) =
   T.intercalate ", "
   [ show (HM.size tbls)       <> " Relations"
   , show (HM.size rels)       <> " Relationships"
@@ -152,19 +158,24 @@ maxDbTablesForFuzzySearch = 500
 querySchemaCache :: AppConfig -> SQL.Transaction SchemaCache
 querySchemaCache conf@AppConfig{..} = do
   SQL.sql "set local schema ''" -- This voids the search path. The following queries need this for getting the fully qualified name(schema.name) of every db object
-  tabs    <- SQL.statement conf $ allTables prepared
-  keyDeps <- SQL.statement conf $ allViewsKeyDependencies prepared
-  m2oRels <- SQL.statement mempty $ allM2OandO2ORels prepared
-  funcs   <- SQL.statement conf $ allFunctions prepared
-  cRels   <- SQL.statement mempty $ allComputedRels prepared
-  reps    <- SQL.statement conf $ dataRepresentations prepared
-  mHdlers <- SQL.statement conf $ mediaHandlers prepared
+  tabs    <- sqlTimedStatement isLogDebug gucTbls  conf   $ allTables prepared
+  keyDeps <- sqlTimedStatement isLogDebug gucKdeps conf   $ allViewsKeyDependencies prepared
+  m2oRels <- sqlTimedStatement isLogDebug gucRels  mempty $ allM2OandO2ORels prepared
+  funcs   <- sqlTimedStatement isLogDebug gucFuncs conf   $ allFunctions prepared
+  cRels   <- sqlTimedStatement isLogDebug gucCrels mempty $ allComputedRels prepared
+  reps    <- sqlTimedStatement isLogDebug gucDreps conf   $ dataRepresentations prepared
+  mHdlers <- sqlTimedStatement isLogDebug gucMhdrs conf   $ mediaHandlers prepared
   tzones  <- if configDbTimezoneEnabled
-    then SQL.statement mempty $ timezones prepared
+    then sqlTimedStatement isLogDebug gucTzones mempty $ timezones prepared
     else pure S.empty
   _       <-
     let sleepCall = SQL.Statement "select pg_sleep($1 / 1000.0)" (param HE.int4) HD.noResult prepared in
     for_ configInternalSCQuerySleep (`SQL.statement` sleepCall) -- only used for testing
+
+  qsTime <-
+    if isLogDebug
+      then Just <$> SQL.statement () (extractTimings configDbTimezoneEnabled prepared)
+      else pure Nothing
 
   let tabsWViewsPks = addViewPrimaryKeys tabs keyDeps
       rels          = addInverseRels $ addM2MRels tabsWViewsPks $ addViewM2OAndO2ORels keyDeps m2oRels
@@ -183,11 +194,13 @@ querySchemaCache conf@AppConfig{..} = do
         -- Only build fuzzy index for schemas with a reasonable number of tables
         -- Fuzzy.FuzzySet is memory heavy we just don't use it for large schemas
         Fuzzy.fromList <$> HM.filter ((< maxDbTablesForFuzzySearch) . length) (HM.fromListWith (<>) ((qiSchema &&& pure . qiName) <$> HM.keys tabsWViewsPks))
+    , dbQueryTimings = qsTime
     }
   where
     schemas = toList configDbSchemas
     prepared = configDbPreparedStatements
     delayEval confDelay result = maybe result (unsafePerformIO . (($> result) . (threadDelay . (1000 *) . fromIntegral))) confDelay
+    isLogDebug = configLogLevel == LogDebug
 
 -- | overrides detected relationships with the computed relationships and gets the RelationshipsMap
 getOverrideRelationshipsMap :: [Relationship] -> [Relationship] -> RelationshipsMap
@@ -221,6 +234,7 @@ removeInternal schemas dbStruct =
     , dbMediaHandlers   = dbMediaHandlers dbStruct
     , dbTimezones       = dbTimezones dbStruct
     , dbTablesFuzzyIndex = dbTablesFuzzyIndex dbStruct
+    , dbQueryTimings      = dbQueryTimings dbStruct
     }
   where
     hasInternalJunction ComputedRelationship{} = False
@@ -1147,3 +1161,72 @@ nullableColumn = HD.column . HD.nullable
 
 arrayColumn :: HD.Value a -> HD.Row [a]
 arrayColumn = column . HD.listArray . HD.nonNullable
+
+{-
+ - Times a sql statement inside a transaction, for this:
+ -
+ - 1. We start a timer: select set_config('pgrst.tmp_x', clock_timestamp()::text, false);
+ - 2. Run the statement: select ....
+ - 3. End the timer:  select set_config('pgrst.tmp_x', (clock_timestamp() - current_setting('pgrst.tmp_x', false)::timestamptz)::text, false);
+ -
+ - We can do this for several statements inside the transaction. The timings are later captured at the end of the transaction with extractTimings.
+ -}
+sqlTimedStatement :: Bool -> ByteString -> a -> SQL.Statement a b -> SQL.Transaction b
+sqlTimedStatement isLogDebug guc params stmt =
+  if isLogDebug then
+    SQL.sql sFrag >> SQL.statement params stmt <* SQL.sql eFrag
+  else
+    SQL.statement params stmt
+  where
+    sFrag = "select set_config('pgrst." <> guc <> "', clock_timestamp()::text, true)"
+    eFrag = "select set_config('pgrst." <> guc <> "', (clock_timestamp() - current_setting('pgrst." <> guc <> "', false)::timestamptz)::text, true)"
+
+-- Extract all the generated timings (see sqlTimedStatement) converting the value to milliseconds.
+extractTimings :: Bool -> Bool -> SQL.Statement () QueryTimings
+extractTimings hasTimezones = SQL.Statement sql HE.noParams decodeThem
+  where
+    qFrag setting = "extract('milliseconds' from current_setting('pgrst." <> setting <> "', false)::interval)::text"
+    sql = "SELECT " <> BS.intercalate ","
+      [ qFrag gucTbls,  qFrag gucKdeps, qFrag gucRels
+      , qFrag gucFuncs, qFrag gucCrels, qFrag gucDreps
+      , qFrag gucMhdrs, if hasTimezones then qFrag gucTzones else "'0.0'"
+      ]
+    decodeThem :: HD.Result QueryTimings
+    decodeThem = HD.singleRow $
+      QueryTimings
+        <$> column HD.text <*> column HD.text <*> column HD.text
+        <*> column HD.text <*> column HD.text <*> column HD.text
+        <*> column HD.text <*> column HD.text
+
+data QueryTimings = QueryTimings
+  { qtTables  :: Text
+  , qtKeyDeps :: Text
+  , qtRels    :: Text
+  , qtFuncs   :: Text
+  , qtCrels   :: Text
+  , qtDreps   :: Text
+  , qtMhdrs   :: Text
+  , qtTzones  :: Text
+  } deriving (Show)
+
+queryTimingsWLabels :: QueryTimings -> [(ByteString, Text)]
+queryTimingsWLabels QueryTimings{..} =
+  [ (gucTbls, qtTables)
+  , (gucKdeps, qtKeyDeps)
+  , (gucRels, qtRels)
+  , (gucFuncs, qtFuncs)
+  , (gucCrels, qtCrels)
+  , (gucDreps, qtDreps)
+  , (gucMhdrs, qtMhdrs)
+  , (gucTzones, qtTzones)
+  ]
+
+gucTbls, gucKdeps, gucRels, gucFuncs, gucCrels, gucDreps, gucMhdrs, gucTzones :: ByteString
+gucTbls   = "tables"
+gucKdeps  = "keydeps"
+gucRels   = "rels"
+gucFuncs  = "funcs"
+gucCrels  = "comprels"
+gucDreps  = "dreps"
+gucMhdrs  = "mhandlers"
+gucTzones = "tzones"
