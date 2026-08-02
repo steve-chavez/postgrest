@@ -27,6 +27,7 @@ module PostgREST.Plan
   , addNullEmbedFilters
   ) where
 
+import qualified Data.Aeson                    as JSON
 import qualified Data.HashMap.Strict           as HM
 import qualified Data.HashMap.Strict.InsOrd    as HMI
 import qualified Data.List                     as L
@@ -65,6 +66,7 @@ import PostgREST.SchemaCache.Routine         (MediaHandler (..), Routine (..),
 import PostgREST.SchemaCache.Table           (Column (..), Table (..),
                                               TablesMap, tableColumnsList,
                                               tablePKCols)
+import PostgREST.Version                     (prettyVersion)
 
 import PostgREST.ApiRequest.Preferences
 import PostgREST.ApiRequest.Types
@@ -214,13 +216,17 @@ callReadPlan identifier conf sCache apiRequest@ApiRequest{iPreferences=Preferenc
         InvRead _ -> S.fromList $ fst <$> qsParams'
         Inv       -> iColumns
   proc@Function{..} <- mapLeft SchemaCacheErr $
-    findProc identifier paramKeys (dbRoutines sCache) iContentMediaType (invMethod == Inv)
+    if iIsRootRoutine
+      then findRootProc identifier (dbRoutines sCache)
+      else findProc identifier paramKeys (dbRoutines sCache) iContentMediaType (invMethod == Inv)
   let relIdentifier = QualifiedIdentifier pdSchema (fromMaybe pdName $ Routine.funcTableName proc) -- done so a set returning function can embed other relations
   rPlan <- readPlan relIdentifier conf sCache apiRequest
-  let args = case (invMethod, iContentMediaType) of
-        (InvRead _, _)      -> DirectArgs $ toRpcParams proc qsParams'
-        (Inv, MTUrlEncoded) -> DirectArgs $ maybe mempty (toRpcParams proc . payArray) iPayload
-        (Inv, _)            -> JsonArgs $ payRaw <$> iPayload
+  let args = case (iIsRootRoutine, pdParams, invMethod, iContentMediaType) of
+        (True, [], _, _)       -> DirectArgs mempty
+        (True, [_], _, _)      -> JsonArgs $ Just $ rootSpecArg conf
+        (_, _, InvRead _, _)      -> DirectArgs $ toRpcParams proc qsParams'
+        (_, _, Inv, MTUrlEncoded) -> DirectArgs $ maybe mempty (toRpcParams proc . payArray) iPayload
+        (_, _, Inv, _)            -> JsonArgs $ payRaw <$> iPayload
       txMode = case (invMethod, pdVolatility) of
           (InvRead _,  _)          -> SQL.Read
           (Inv, Routine.Stable)    -> SQL.Read
@@ -233,6 +239,14 @@ callReadPlan identifier conf sCache apiRequest@ApiRequest{iPreferences=Preferenc
   return $ CallReadPlan rPlan cPlan txMode proc handler mediaType invMethod identifier
   where
     qsParams' = QueryParams.qsParams iQueryParams
+
+    rootSpecArg AppConfig{..} = JSON.encode $ JSON.object
+      [ "server-host"              JSON..= configServerHost
+      , "server-port"              JSON..= T.pack (show configServerPort)
+      , "openapi-server-proxy-uri" JSON..= configOpenApiServerProxyUri
+      , "db-schemas"               JSON..= toList configDbSchemas
+      , "version"                  JSON..= decodeUtf8 prettyVersion
+      ]
 
     failMaxAffectedRpcReturnsSingle :: (Maybe PreferMaxAffected, Maybe PreferHandling) -> Routine -> Either Error ()
     failMaxAffectedRpcReturnsSingle (Just (PreferMaxAffected _), Just Strict) rout = if funcReturnsSingle rout then Left $ ApiRequestErr MaxAffectedRpcViolation else Right ()
@@ -305,6 +319,20 @@ findProc qi argumentsKeys allProcs contentMediaType isInvPost =
       -- If the function has required and optional parameters, the arguments keys have to match the required parameters
       -- and can match any or none of the default parameters.
         (reqParams, optParams) -> argumentsKeys `S.difference` S.fromList (ppName <$> optParams) == S.fromList (ppName <$> reqParams)
+
+-- | Find the proc in db-root-spec
+findRootProc :: QualifiedIdentifier -> RoutineMap -> Either SchemaCacheError Routine
+findRootProc qi allProcs =
+  case filter isRootSpec lookupProcName of
+    [proc]  -> Right proc
+    []      -> Left $ NoRpc (qiSchema qi) (qiName qi) [] MTApplicationJSON True (HM.keys allProcs) lookupProcName
+    procs   -> Left $ AmbiguousRpc procs
+  where
+    lookupProcName = HM.lookupDefault mempty qi allProcs
+    -- Only for cases where we have an empty parameter or single json parameter
+    isRootSpec Function{pdParams=[]} = True
+    isRootSpec Function{pdParams=[RoutineParam{ppName="", ppType="json"}]} = True
+    isRootSpec _ = False
 
 -- | During planning we need to resolve Field -> CoercibleField (finding the context specific target type and map function).
 -- | ResolverContext facilitates this without the need to pass around a laundry list of parameters.
