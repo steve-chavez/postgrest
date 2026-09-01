@@ -3,5 +3,11 @@ tests: true
 allow-newer:
   hasql:postgresql-libpq
 
+source-repository-package
+  type: git
+  location: https://github.com/mkleczek/wai
+  tag: c2f6cc16baa66d0f1f41ad05801e066056ddc429
+  subdir: auto-update
+
 -- https://github.com/martijnbastiaan/doctest-parallel/blob/main/example/README.md#cabalproject
 write-ghc-environment-files: always

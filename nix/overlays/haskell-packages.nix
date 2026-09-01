@@ -1,4 +1,4 @@
-{ haskell }:
+{ fetchFromGitHub, haskell }:
 
 let
   inherit (haskell) lib;
@@ -47,15 +47,13 @@ _: prev:
   # Before upgrading fuzzyset to 0.3, check: https://github.com/PostgREST/postgrest/issues/3329
   fuzzyset = prev.fuzzyset_0_2_4;
 
-  # TODO: Remove once available in nixpkgs
   auto-update =
-    prev.callHackageDirect
-      {
-        pkg = "auto-update";
-        ver = "0.2.7";
-        sha256 = "sha256-fHX/OqF/cB9rbpGpLUtA29bcEJS43HUWHcK55yUxKoo=";
-      }
-      { };
+    prev.callCabal2nixWithOptions "auto-update" (fetchFromGitHub {
+      owner = "mkleczek";
+      repo = "wai";
+      rev = "c2f6cc16baa66d0f1f41ad05801e066056ddc429";
+      sha256 = "sha256-5x2qJOu0qo0MX25+g0G0YtdfiPe9rZTnKAJaSvqOALQ=";
+    }) "--subpath=auto-update" { };
 
   # TODO: Remove once available in nixpkgs
   aeson-jsonpath =
